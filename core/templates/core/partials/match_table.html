@@ -1,0 +1,19 @@
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Round</th><th>Date</th><th>Type</th><th>Division</th><th>Match</th><th>Status</th><th>Score</th>{% if management or user.is_staff %}<th>Action</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for match in matches %}
+      <tr>
+        <td>{{ match.round_number|default:'-' }}</td>
+        <td>{{ match.scheduled_at|date:'M d, Y H:i'|default:'TBD' }}</td>
+        <td>{{ match.get_match_type_display }}</td>
+        <td>{% if match.division %}{{ match.division.name }}{% else %}-{% endif %}</td>
+        <td>{{ match.home_player.user.username }} vs {{ match.away_player.user.username }}</td>
+        <td><span class="badge">{{ match.get_status_display }}</span></td>
+        <td>{% if match.has_score %}{{ match.home_score }} - {{ match.away_score }}{% else %}-{% endif %}</td>
+        {% if management or user.is_staff %}<td><a href="{% url 'update_match_score' match.pk %}">Edit</a></td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>

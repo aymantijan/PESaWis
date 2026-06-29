@@ -1,0 +1,90 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}PESOS League{% endblock %}</title>
+  <link rel="icon" href="{% static 'images/pesawis-logo.png' %}">
+  <link rel="stylesheet" href="{% static 'core/css/site.css' %}">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{% url 'home' %}">
+    <img src="{% static 'images/pesawis-logo.png' %}" alt="PESaWis logo" class="site-logo">
+    <span>PESaWis</span>
+  </a>
+  <button class="nav-toggle" data-nav-toggle aria-label="Open navigation">Menu</button>
+  <nav class="nav" data-nav>
+    <a href="{% url 'home' %}">Home</a>
+    <div class="nav-group">
+      <button type="button">League</button>
+      <div class="dropdown">
+        <a href="{% url 'division_list' %}">Divisions</a>
+        <a href="{% url 'calendar' %}">Calendar</a>
+        <a href="{% url 'standings' %}">Standings</a>
+        <a href="{% url 'rankings' %}">Best Players</a>
+        <a href="{% url 'rankings' %}">Top Scorers</a>
+        <a href="{% url 'rankings' %}">Best Defenders</a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button type="button">Tournaments</button>
+      <div class="dropdown">
+        <a href="{% url 'tournament_list' %}">All Tournaments</a>
+        <a href="{% url 'tournament_list' %}">Groups</a>
+        <a href="{% url 'tournament_list' %}">Knockout</a>
+      </div>
+    </div>
+    <div class="nav-group">
+      <button type="button">Players</button>
+      <div class="dropdown">
+        <a href="{% url 'player_list' %}">Player List</a>
+        {% if user.is_authenticated %}<a href="{% url 'dashboard' %}">Friendly Requests</a>{% endif %}
+      </div>
+    </div>
+    <a href="{% url 'news_feed' %}">Feed</a>
+    <a href="{% url 'rules' %}">Rules</a>
+    {% if user.is_authenticated %}
+      <a href="{% url 'notifications' %}">Notifications{% if unread_notification_count %} <span class="nav-badge">{{ unread_notification_count }}</span>{% endif %}</a>
+    {% endif %}
+    <div class="nav-group">
+      <button type="button">Account</button>
+      <div class="dropdown">
+        {% if user.is_authenticated %}
+          <a href="{% url 'dashboard' %}">Profile</a>
+          <form action="{% url 'logout' %}" method="post" class="dropdown-form">{% csrf_token %}<button type="submit">Logout</button></form>
+        {% else %}
+          <a href="{% url 'login' %}">Login</a>
+          <a href="{% url 'signup' %}">Sign up</a>
+        {% endif %}
+      </div>
+    </div>
+    {% if user.is_staff %}
+    <div class="nav-group">
+      <button type="button">Admin/Staff</button>
+      <div class="dropdown">
+        <a href="{% url 'staff_dashboard' %}">Staff/Admin Dashboard</a>
+        <a href="{% url 'create_calendar' %}">Create Calendar</a>
+        <a href="{% url 'calendar' %}">Manage Scores</a>
+        <a href="{% url 'tournament_list' %}">Manage Tournaments</a>
+        <a href="/admin/">Django Admin</a>
+      </div>
+    </div>
+    {% endif %}
+  </nav>
+</header>
+
+<main class="page">
+  {% if messages %}
+  <section class="messages">
+    {% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}
+  </section>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">PESOS League Manager</footer>
+<script src="{% static 'core/js/app.js' %}"></script>
+</body>
+</html>

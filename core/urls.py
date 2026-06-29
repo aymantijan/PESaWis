@@ -1,0 +1,59 @@
+from django.urls import path
+
+from . import views
+
+urlpatterns = [
+    path('', views.home, name='home'),
+    path('rules/', views.rules, name='rules'),
+    path('signup/', views.signup, name='signup'),
+    path('dashboard/', views.dashboard, name='dashboard'),
+    path('notifications/', views.notifications, name='notifications'),
+    path('notifications/<int:pk>/read/', views.mark_notification_read, name='mark_notification_read'),
+    path('profile/edit/', views.edit_profile, name='edit_profile'),
+
+    path('leagues/', views.league_list, name='league_list'),
+    path('leagues/<slug:slug>/', views.league_detail, name='league_detail'),
+    path('leagues/<slug:slug>/join/', views.request_to_join_league, name='request_to_join_league'),
+
+    path('divisions/', views.division_list, name='division_list'),
+    path('divisions/<int:pk>/', views.division_detail, name='division_detail'),
+    path('calendar/', views.calendar, name='calendar'),
+    path('standings/', views.standings, name='standings'),
+    path('rankings/', views.rankings, name='rankings'),
+
+    path('players/', views.player_list, name='player_list'),
+    path('players/<str:username>/', views.player_detail, name='player_detail'),
+    path('players/<str:username>/friendly/', views.request_friendly_match, name='request_friendly_match'),
+    path('friendly-requests/<int:pk>/<str:action>/', views.handle_friendly_request, name='handle_friendly_request'),
+
+    path('feed/', views.news_feed, name='news_feed'),
+    path('feed/posts/<int:pk>/edit/', views.edit_post, name='edit_post'),
+    path('feed/posts/<int:pk>/delete/', views.delete_post, name='delete_post'),
+    path('feed/comments/<int:pk>/edit/', views.edit_comment, name='edit_comment'),
+    path('feed/comments/<int:pk>/delete/', views.delete_comment, name='delete_comment'),
+    path('news/<int:pk>/comment/', views.add_comment, name='add_comment'),
+    path('news/<int:pk>/<str:reaction>/', views.react_post, name='react_post'),
+
+    path('tournaments/', views.tournament_list, name='tournament_list'),
+    path('tournaments/<slug:slug>/', views.tournament_detail, name='tournament_detail'),
+    path('tournaments/<slug:slug>/participants/new/', views.add_tournament_participant, name='add_tournament_participant'),
+    path('tournaments/<slug:slug>/generate-groups/', views.generate_tournament_groups, name='generate_tournament_groups'),
+    path('tournaments/<slug:slug>/generate-group-fixtures/', views.generate_group_fixtures, name='generate_group_fixtures'),
+    path('tournaments/<slug:slug>/generate-knockout/', views.generate_knockout, name='generate_knockout'),
+    path('tournament-matches/<int:pk>/score/', views.update_tournament_match, name='update_tournament_match'),
+
+    path('seasons/<int:season_id>/outcome/', views.season_outcome_view, name='season_outcome'),
+    path('seasons/<int:season_id>/apply-promotion-relegation/', views.apply_promotion_relegation, name='apply_promotion_relegation'),
+
+    path('management/', views.management_dashboard, name='management_dashboard'),
+    path('staff/', views.management_dashboard, name='staff_dashboard'),
+    path('management/leagues/new/', views.create_league, name='create_league'),
+    path('management/seasons/new/', views.create_season, name='create_season'),
+    path('management/divisions/new/', views.create_division, name='create_division'),
+    path('management/divisions/members/new/', views.create_division_membership, name='create_division_membership'),
+    path('management/calendar/create/', views.create_calendar, name='create_calendar'),
+    path('management/matches/new/', views.create_match, name='create_match'),
+    path('management/matches/<int:pk>/score/', views.update_match_score, name='update_match_score'),
+    path('management/join-requests/<int:pk>/<str:action>/', views.handle_join_request, name='handle_join_request'),
+    path('management/tournaments/new/', views.create_tournament, name='create_tournament'),
+]

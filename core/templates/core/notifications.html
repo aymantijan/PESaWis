@@ -1,0 +1,33 @@
+{% extends 'core/base.html' %}
+{% block title %}Notifications - PESOS{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Notifications</h1></section>
+
+<section class="panel">
+  {% if not preference.enabled %}
+    <p class="empty">Notifications are disabled. Enable them to receive updates.</p>
+  {% endif %}
+  <form method="post" class="form compact-form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Save preferences</button></form>
+</section>
+
+<section>
+  <h2>Recent notifications</h2>
+  <div class="stack">
+    {% for notification in notifications %}
+    <div class="list-card {% if notification.is_read %}muted-card{% endif %}">
+      <div>
+        <strong>{{ notification.title }}</strong>
+        <p class="muted">{{ notification.message }}</p>
+        {% if notification.link %}<a href="{{ notification.link }}">Open</a>{% endif %}
+      </div>
+      <div class="inline-actions">
+        <span class="badge">{{ notification.get_notification_type_display }}</span>
+        {% if not notification.is_read %}
+        <form method="post" action="{% url 'mark_notification_read' notification.pk %}">{% csrf_token %}<button class="button small ghost">Mark as read</button></form>
+        {% endif %}
+      </div>
+    </div>
+    {% empty %}<div class="empty">No notifications yet.</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

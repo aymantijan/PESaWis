@@ -1,0 +1,8 @@
+{% extends 'core/base.html' %}
+{% block title %}Sign up · PESOS{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1>Create player account</h1>
+  <form method="post" class="form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Sign up</button></form>
+</section>
+{% endblock %}

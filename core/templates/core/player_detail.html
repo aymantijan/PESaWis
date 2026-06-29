@@ -1,0 +1,33 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ profile.user.username }} - PESOS{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    {% if profile.profile_photo %}<img class="avatar large" src="{{ profile.profile_photo.url }}" alt="{{ profile.user.username }} profile photo">{% else %}<span class="avatar large">{{ profile.initials }}</span>{% endif %}
+    <h1>{{ profile.user.username }}</h1>
+    <p>{{ profile.full_name|default:profile.user.get_full_name|default:'No full name' }} · Konami ID: {{ profile.konami_id }}</p>
+    <p>Division: {% if division_membership %}{{ division_membership.division.name }}{% else %}None{% endif %}</p>
+  </div>
+  {% if user.is_authenticated and user != profile.user %}<a class="button" href="{% url 'request_friendly_match' profile.user.username %}">Request friendly match</a>{% endif %}
+</section>
+<section class="stats-grid">
+  <div><strong>{{ stat.played }}</strong><span>Matches</span></div>
+  <div><strong>{{ stat.wins }}</strong><span>Wins</span></div>
+  <div><strong>{{ stat.draws }}</strong><span>Draws</span></div>
+  <div><strong>{{ stat.losses }}</strong><span>Losses</span></div>
+  <div><strong>{{ stat.goals_for }}</strong><span>Goals scored</span></div>
+  <div><strong>{{ stat.goals_against }}</strong><span>Goals conceded</span></div>
+  <div><strong>{{ stat.points }}</strong><span>Points</span></div>
+</section>
+<section><h2>Match history</h2>{% if matches %}{% include 'core/partials/match_table.html' with matches=matches %}{% else %}<div class="empty">No matches yet.</div>{% endif %}</section>
+<section class="grid two">
+  <div>
+    <h2>Friendly match requests</h2>
+    <div class="stack">{% for req in friendly_requests %}<div class="list-card"><span>{{ req.requester.user.username }} vs {{ req.opponent.user.username }}</span><span>{{ req.get_status_display }}</span></div>{% empty %}<div class="empty">No requests yet.</div>{% endfor %}</div>
+  </div>
+  <div>
+    <h2>Recent posts</h2>
+    <div class="stack">{% for post in posts %}<div class="post-mini">{{ post.content|truncatechars:140 }}</div>{% empty %}<div class="empty">No posts yet.</div>{% endfor %}</div>
+  </div>
+</section>
+{% endblock %}

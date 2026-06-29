@@ -1,0 +1,94 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ tournament.name }} - PESOS{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div><h1>{{ tournament.name }}</h1><p>{{ tournament.get_status_display }}{% if tournament.champion %} - Champion: {{ tournament.champion.user.username }}{% endif %}</p></div>
+</section>
+{% if user.is_staff %}
+<section class="toolbar">
+  <a class="button small" href="{% url 'add_tournament_participant' tournament.slug %}">Add participant</a>
+  <form method="post" action="{% url 'generate_tournament_groups' tournament.slug %}">{% csrf_token %}<button class="button small">Auto-select Players and Generate Groups</button></form>
+  <form method="post" action="{% url 'generate_group_fixtures' tournament.slug %}">{% csrf_token %}<button class="button small ghost">Generate Group Fixtures</button></form>
+  <form method="post" action="{% url 'generate_knockout' tournament.slug %}">{% csrf_token %}<button class="button small">Generate Knockout Stage</button></form>
+</section>
+{% endif %}
+
+<section class="stats-grid">
+  <div><strong>{{ selected_participants.count }}</strong><span>Selected players</span></div>
+  <div><strong>{{ reserve_participants.count }}</strong><span>Reserves</span></div>
+  <div><strong>{{ groups.count }}</strong><span>Groups</span></div>
+  <div><strong>{{ next_stage_format }}</strong><span>Next stage format</span></div>
+</section>
+
+<section class="grid two">
+  <div>
+    <h2>Selected players</h2>
+    <div class="stack">
+      {% for participant in selected_participants %}
+      <div class="list-card"><span>{{ participant.player.user.username }}</span><span>Rank {{ participant.seed }}</span></div>
+      {% empty %}<div class="empty">No selected players yet.</div>{% endfor %}
+    </div>
+  </div>
+  <div>
+    <h2>Reserves</h2>
+    <div class="stack">
+      {% for participant in reserve_participants %}
+      <div class="list-card"><span>{{ participant.player.user.username }}</span><span>Reserve {{ forloop.counter }}</span></div>
+      {% empty %}<div class="empty">No reserves.</div>{% endfor %}
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Groups</h2>
+  <div class="grid two">
+  {% for group, standings in group_tables %}
+    <article class="panel">
+      <h3>Group {{ group.name }}</h3>
+      <div class="stack">
+        {% for membership in group.memberships.all %}
+        <div class="list-card"><span>{{ membership.participant.player.user.username }}</span><span>Seed {{ membership.participant.seed }}</span></div>
+        {% endfor %}
+      </div>
+      <h4>Group standings</h4>
+      {% include 'core/partials/standings_table.html' with standings=standings %}
+      <h4>Fixtures</h4>
+      <div class="stack">
+      {% for match in group.matches.all %}
+        <div class="list-card">
+          <span>{{ match.home_player.user.username }} vs {{ match.away_player.user.username }}</span>
+          <span>{% if match.has_score %}{{ match.home_score }} - {{ match.away_score }}{% else %}{{ match.get_status_display }}{% endif %}{% if user.is_staff %} - <a href="{% url 'update_tournament_match' match.pk %}">Edit</a>{% endif %}</span>
+        </div>
+      {% empty %}<div class="empty">No fixtures yet.</div>{% endfor %}
+      </div>
+    </article>
+  {% empty %}<div class="empty">Groups not generated yet.</div>{% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>Qualified players</h2>
+  <div class="stack">
+    {% for group, standings in group_tables %}
+      {% for row in standings|slice:":2" %}
+      <div class="list-card"><span>Group {{ group.name }} - {{ row.player.user.username }}</span><span>{{ row.points }} pts</span></div>
+      {% endfor %}
+    {% empty %}<div class="empty">No qualified players yet.</div>{% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>Knockout</h2>
+  {% if next_stage_format == 'Manual/adapted knockout required' %}
+    <div class="empty">This participant count requires a manual/adapted knockout format after group qualification.</div>
+  {% endif %}
+  <div class="stack">
+  {% for match in knockout %}
+    <div class="list-card">
+      <span>{{ match.get_stage_display }}: {{ match.home_player.user.username }} vs {{ match.away_player.user.username }}</span>
+      <span>{% if match.has_score %}{{ match.home_score }} - {{ match.away_score }}{% if match.winner %} - Winner: {{ match.winner.user.username }}{% endif %}{% else %}{{ match.get_status_display }}{% endif %}{% if user.is_staff %} - <a href="{% url 'update_tournament_match' match.pk %}">Edit</a>{% endif %}</span>
+    </div>
+  {% empty %}<div class="empty">Knockout bracket not generated yet.</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

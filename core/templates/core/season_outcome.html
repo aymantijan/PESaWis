@@ -1,0 +1,20 @@
+{% extends 'core/base.html' %}
+{% block title %}Season outcome - PESOS{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div><h1>Season outcome</h1><p>{{ season.name }}</p></div>
+  {% if user.is_staff and season.status == 'completed' and not season.promotions_applied %}
+  <form method="post" action="{% url 'apply_promotion_relegation' season.id %}">{% csrf_token %}<button class="button">Apply Promotion/Relegation</button></form>
+  {% endif %}
+</section>
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Division</th><th>Rank</th><th>Player</th><th>Points</th><th>GD</th><th>Outcome</th><th>Target</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr><td>{{ row.division.name }}</td><td>{{ row.rank }}</td><td>{{ row.player.user.username }}</td><td>{{ row.stats.points }}</td><td>{{ row.stats.goal_diff }}</td><td>{{ row.outcome }}</td><td>{% if row.target %}{{ row.target.name }}{% else %}-{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="7">No standings yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

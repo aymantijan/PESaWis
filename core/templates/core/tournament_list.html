@@ -1,0 +1,12 @@
+{% extends 'core/base.html' %}
+{% block title %}Tournaments - PESOS{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Tournaments</h1>{% if user.is_staff %}<a class="button small" href="{% url 'create_tournament' %}">Create tournament</a>{% endif %}</section>
+<div class="stack">
+{% for tournament in tournaments %}
+  <a class="list-card" href="{{ tournament.get_absolute_url }}"><strong>{{ tournament.name }}</strong><span>{{ tournament.get_status_display }}{% if tournament.champion %} - Champion: {{ tournament.champion.user.username }}{% endif %}</span></a>
+{% empty %}
+  <div class="empty">No tournaments yet.</div>
+{% endfor %}
+</div>
+{% endblock %}

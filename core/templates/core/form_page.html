@@ -1,0 +1,8 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ title }} · PESOS{% endblock %}
+{% block content %}
+<section class="form-shell">
+  <h1>{{ title }}</h1>
+  <form method="post" enctype="multipart/form-data" class="form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Save</button></form>
+</section>
+{% endblock %}

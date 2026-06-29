@@ -1,0 +1,9 @@
+{% extends 'core/base.html' %}
+{% block title %}Login · PESOS{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1>Login</h1>
+  <form method="post" class="form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Login</button></form>
+  <p class="muted">No account yet? <a href="{% url 'signup' %}">Create one</a>.</p>
+</section>
+{% endblock %}

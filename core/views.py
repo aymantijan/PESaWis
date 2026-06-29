@@ -1,0 +1,899 @@
+from itertools import combinations
+from functools import wraps
+
+from django.contrib import messages
+from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.models import User
+from django.db import transaction
+from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+
+from .forms import (
+    CalendarGenerationForm,
+    DivisionForm,
+    DivisionMembershipForm,
+    FriendlyMatchRequestForm,
+    LeagueForm,
+    MatchForm,
+    NewsCommentForm,
+    NewsPostForm,
+    NotificationPreferenceForm,
+    PlayerProfileForm,
+    SeasonForm,
+    SignupForm,
+    TournamentForm,
+    TournamentMatchScoreForm,
+    TournamentParticipantForm,
+)
+from .models import (
+    Division,
+    DivisionMembership,
+    FriendlyMatchRequest,
+    League,
+    LeagueJoinRequest,
+    LeagueMembership,
+    Match,
+    NewsComment,
+    NewsPost,
+    NewsReaction,
+    Notification,
+    NotificationPreference,
+    PlayerProfile,
+    Season,
+    Tournament,
+    TournamentGroup,
+    TournamentGroupMembership,
+    TournamentMatch,
+    TournamentParticipant,
+)
+from .utils import best_defenders, compute_player_stats, division_standings, season_outcomes, top_scorers, tournament_group_stats
+
+
+def staff_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            messages.error(request, 'You must be logged in to perform this action.')
+            return redirect('login')
+        if not (request.user.is_staff or request.user.is_superuser):
+            messages.error(request, 'You do not have permission to perform this action.')
+            return redirect('home')
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def add_form_error_messages(request, form):
+    seen = set()
+    for errors in form.errors.values():
+        for error in errors:
+            if error not in seen:
+                messages.error(request, error)
+                seen.add(error)
+
+
+def notification_allowed(preference, notification_type):
+    if not preference.enabled:
+        return False
+    if notification_type == 'friendly_request':
+        return preference.friendly_requests
+    if notification_type == 'match_update':
+        return preference.match_updates
+    if notification_type == 'comment':
+        return preference.comments
+    return preference.system_updates
+
+
+def create_notification(user, title, message, notification_type='system', link=''):
+    preference, _ = NotificationPreference.objects.get_or_create(user=user)
+    if not notification_allowed(preference, notification_type):
+        return None
+    return Notification.objects.create(
+        user=user,
+        title=title,
+        message=message,
+        notification_type=notification_type,
+        link=link,
+    )
+
+
+def notify_match_scheduled(match):
+    link = '/calendar/'
+    for profile in [match.home_player, match.away_player]:
+        create_notification(
+            profile.user,
+            'Match scheduled',
+            f'{match.home_player.user.username} vs {match.away_player.user.username} has been scheduled.',
+            'match_update',
+            link,
+        )
+
+
+def public_leagues():
+    return League.objects.filter(visibility='public', status='active')
+
+
+def home(request):
+    leagues = public_leagues().annotate(member_count=Count('memberships')).order_by('name')[:6]
+    posts = NewsPost.objects.select_related('author').prefetch_related('comments', 'reactions')[:5]
+    upcoming = Match.objects.select_related('home_player__user', 'away_player__user').filter(status='scheduled').order_by('scheduled_at')[:6]
+    return render(request, 'core/home.html', {'leagues': leagues, 'posts': posts, 'upcoming': upcoming, 'scorers': top_scorers(5)})
+
+
+def signup(request):
+    form = SignupForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        login(request, user)
+        messages.success(request, 'Created successfully.')
+        return redirect('dashboard')
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/signup.html', {'form': form})
+
+
+@login_required
+def dashboard(request):
+    profile = request.user.player_profile
+    matches = Match.objects.select_related('home_player__user', 'away_player__user').filter(Q(home_player=profile) | Q(away_player=profile))[:10]
+    incoming = FriendlyMatchRequest.objects.select_related('requester__user').filter(opponent=profile, status='pending')
+    outgoing = FriendlyMatchRequest.objects.select_related('opponent__user').filter(requester=profile)[:10]
+    joins = LeagueJoinRequest.objects.select_related('league').filter(player=profile)[:10]
+    return render(request, 'core/dashboard.html', {'profile': profile, 'matches': matches, 'incoming': incoming, 'outgoing': outgoing, 'joins': joins})
+
+
+@login_required
+def notifications(request):
+    preference, _ = NotificationPreference.objects.get_or_create(user=request.user)
+    form = NotificationPreferenceForm(request.POST or None, instance=preference)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Notification preferences updated successfully.')
+        return redirect('notifications')
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    items = request.user.notifications.all()[:50]
+    return render(request, 'core/notifications.html', {
+        'form': form,
+        'preference': preference,
+        'notifications': items,
+    })
+
+
+@login_required
+@require_POST
+def mark_notification_read(request, pk):
+    notification = get_object_or_404(Notification, pk=pk, user=request.user)
+    notification.is_read = True
+    notification.save(update_fields=['is_read', 'updated_at'])
+    messages.success(request, 'Updated successfully.')
+    return redirect('notifications')
+
+
+@login_required
+def edit_profile(request):
+    profile = request.user.player_profile
+    form = PlayerProfileForm(request.POST or None, request.FILES or None, instance=profile)
+    if request.method == 'POST' and form.is_valid():
+        profile = form.save()
+        names = profile.full_name.split(' ', 1)
+        request.user.first_name = names[0] if names else ''
+        request.user.last_name = names[1] if len(names) > 1 else ''
+        request.user.save(update_fields=['first_name', 'last_name'])
+        messages.success(request, 'Updated successfully.')
+        return redirect('dashboard')
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Edit profile', 'form': form})
+
+
+def rules(request):
+    lang = request.GET.get('lang', 'en')
+    if lang not in {'en', 'fr', 'ar'}:
+        lang = 'en'
+    return render(request, 'core/rules.html', {'active_lang': lang})
+
+
+def league_list(request):
+    q = request.GET.get('q', '').strip()
+    leagues = public_leagues().annotate(member_count=Count('memberships'), season_count=Count('seasons'))
+    if q:
+        leagues = leagues.filter(Q(name__icontains=q) | Q(description__icontains=q))
+    return render(request, 'core/league_list.html', {'leagues': leagues, 'q': q})
+
+
+def league_detail(request, slug):
+    league = get_object_or_404(public_leagues(), slug=slug)
+    seasons = league.seasons.exclude(status='draft').prefetch_related('divisions')
+    divisions = Division.objects.filter(season__league=league, season__status__in=['registration_open', 'active', 'completed', 'archived'])
+    matches = league.matches.select_related('home_player__user', 'away_player__user', 'division').order_by('-scheduled_at')[:10]
+    join_state = None
+    if request.user.is_authenticated:
+        profile = request.user.player_profile
+        if LeagueMembership.objects.filter(league=league, player=profile, status='active').exists():
+            join_state = 'member'
+        elif LeagueJoinRequest.objects.filter(league=league, player=profile, status='pending').exists():
+            join_state = 'pending'
+    return render(request, 'core/league_detail.html', {'league': league, 'seasons': seasons, 'divisions': divisions, 'matches': matches, 'join_state': join_state})
+
+
+@login_required
+def request_to_join_league(request, slug):
+    league = get_object_or_404(public_leagues(), slug=slug)
+    profile = request.user.player_profile
+    if LeagueMembership.objects.filter(league=league, player=profile, status='active').exists():
+        messages.info(request, 'You are already a member of this league.')
+        return redirect('league_detail', slug=slug)
+    request_obj, created = LeagueJoinRequest.objects.get_or_create(league=league, player=profile, defaults={'message': ''})
+    if created:
+        messages.success(request, 'Join request sent.')
+    elif request_obj.status == 'rejected':
+        request_obj.status = 'pending'
+        request_obj.save(update_fields=['status', 'updated_at'])
+        messages.success(request, 'Join request sent again.')
+    else:
+        messages.info(request, f'Your request is already {request_obj.status}.')
+    return redirect('league_detail', slug=slug)
+
+
+def division_list(request):
+    divisions = Division.objects.select_related('season__league').filter(season__league__visibility='public', season__league__status='active').annotate(member_count=Count('memberships'))
+    return render(request, 'core/division_list.html', {'divisions': divisions})
+
+
+def division_detail(request, pk):
+    division = get_object_or_404(Division.objects.select_related('season__league'), pk=pk)
+    members = PlayerProfile.objects.filter(division_memberships__division=division, division_memberships__is_active=True).select_related('user')
+    matches = Match.objects.select_related('home_player__user', 'away_player__user').filter(division=division)
+    standings = division_standings(division)
+    return render(request, 'core/division_detail.html', {'division': division, 'members': members, 'matches': matches, 'standings': standings})
+
+
+def calendar(request):
+    matches = Match.objects.select_related('home_player__user', 'away_player__user', 'league', 'division', 'season').filter(Q(league__visibility='public', league__status='active') | Q(match_type='friendly'))
+    status = request.GET.get('status', '')
+    division_id = request.GET.get('division', '')
+    season_id = request.GET.get('season', '')
+    if status:
+        matches = matches.filter(status=status)
+    if division_id:
+        matches = matches.filter(division_id=division_id)
+    if season_id:
+        matches = matches.filter(season_id=season_id)
+    return render(request, 'core/calendar.html', {
+        'matches': matches.order_by('round_number', 'scheduled_at', 'id'),
+        'status': status,
+        'division_id': division_id,
+        'season_id': season_id,
+        'divisions': Division.objects.select_related('season__league'),
+        'seasons': Season.objects.select_related('league'),
+    })
+
+
+def standings(request):
+    divisions = Division.objects.select_related('season__league').all()
+    selected = get_object_or_404(Division, pk=request.GET.get('division')) if request.GET.get('division') else divisions.first()
+    table = division_standings(selected) if selected else []
+    return render(request, 'core/standings.html', {'divisions': divisions, 'selected': selected, 'standings': table})
+
+
+def rankings(request):
+    matches = Match.objects.select_related('home_player__user', 'away_player__user').filter(match_type='official', status='played')
+    stats = compute_player_stats(matches)
+    return render(request, 'core/rankings.html', {
+        'best_players': stats[:20],
+        'top_scorers': sorted(stats, key=lambda x: (-x['goals_for'], -x['points'], x['player'].user.username.lower()))[:20],
+        'best_defenders': best_defenders(20),
+    })
+
+
+def player_list(request):
+    q = request.GET.get('q', '').strip()
+    players = PlayerProfile.objects.select_related('user').filter(is_public=True)
+    if q:
+        players = players.filter(Q(user__username__icontains=q) | Q(full_name__icontains=q) | Q(konami_id__icontains=q))
+    return render(request, 'core/player_list.html', {'players': players, 'q': q})
+
+
+def player_detail(request, username):
+    user = get_object_or_404(User, username=username)
+    profile = get_object_or_404(PlayerProfile, user=user, is_public=True)
+    matches = Match.objects.select_related('home_player__user', 'away_player__user', 'division').filter(Q(home_player=profile) | Q(away_player=profile))[:20]
+    stat = compute_player_stats([m for m in matches if m.status == 'played'], players=[profile])[0]
+    division_membership = profile.division_memberships.select_related('division__season').filter(is_active=True).order_by('division__season__start_date').last()
+    incoming = FriendlyMatchRequest.objects.select_related('requester__user', 'opponent__user').filter(Q(requester=profile) | Q(opponent=profile))[:10]
+    posts = profile.user.news_posts.all()[:5]
+    return render(request, 'core/player_detail.html', {'profile': profile, 'matches': matches, 'stat': stat, 'division_membership': division_membership, 'friendly_requests': incoming, 'posts': posts})
+
+
+@login_required
+def request_friendly_match(request, username):
+    opponent_user = get_object_or_404(User, username=username)
+    opponent = opponent_user.player_profile
+    requester = request.user.player_profile
+    if requester == opponent:
+        messages.error(request, 'You cannot request a match against yourself.')
+        return redirect('player_detail', username=username)
+    form = FriendlyMatchRequestForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        friendly = form.save(commit=False)
+        friendly.requester = requester
+        friendly.opponent = opponent
+        friendly.save()
+        create_notification(
+            opponent.user,
+            'Friendly request received',
+            f'{requester.user.username} sent you a friendly match request.',
+            'friendly_request',
+            '/dashboard/',
+        )
+        messages.success(request, 'Friendly request sent successfully.')
+        return redirect('player_detail', username=username)
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': f'Request friendly match vs {username}', 'form': form})
+
+
+@login_required
+@require_POST
+def handle_friendly_request(request, pk, action):
+    profile = request.user.player_profile
+    if action == 'cancel':
+        req = get_object_or_404(FriendlyMatchRequest, pk=pk, requester=profile, status='pending')
+        req.status = 'cancelled'
+        req.save(update_fields=['status', 'updated_at'])
+        messages.success(request, 'Updated successfully.')
+        return redirect('dashboard')
+    req = get_object_or_404(FriendlyMatchRequest, pk=pk, opponent=profile, status='pending')
+    if action == 'accept':
+        match = Match.objects.create(match_type='friendly', home_player=req.requester, away_player=req.opponent, scheduled_at=req.proposed_at, status='scheduled', created_by=request.user)
+        req.status = 'accepted'
+        req.match = match
+        req.save(update_fields=['status', 'match', 'updated_at'])
+        create_notification(req.requester.user, 'Friendly request accepted', f'{req.opponent.user.username} accepted your friendly request.', 'friendly_request', '/dashboard/')
+        notify_match_scheduled(match)
+        messages.success(request, 'Updated successfully.')
+    elif action == 'decline':
+        req.status = 'declined'
+        req.save(update_fields=['status', 'updated_at'])
+        create_notification(req.requester.user, 'Friendly request declined', f'{req.opponent.user.username} declined your friendly request.', 'friendly_request', '/dashboard/')
+        messages.success(request, 'Updated successfully.')
+    return redirect('dashboard')
+
+
+def news_feed(request):
+    form = NewsPostForm()
+    if request.method == 'POST':
+        if not request.user.is_authenticated:
+            messages.error(request, 'You must be logged in to perform this action.')
+            return redirect('login')
+        form = NewsPostForm(request.POST, request.FILES)
+        if form.is_valid():
+            post = form.save(commit=False)
+            post.author = request.user
+            post.save()
+            messages.success(request, 'Post published successfully.')
+            return redirect('news_feed')
+        add_form_error_messages(request, form)
+    posts = NewsPost.objects.select_related('author').prefetch_related('comments__author', 'reactions')
+    return render(request, 'core/news_feed.html', {'posts': posts, 'form': form, 'comment_form': NewsCommentForm()})
+
+
+@login_required
+def edit_post(request, pk):
+    post = get_object_or_404(NewsPost, pk=pk)
+    if post.author != request.user:
+        messages.error(request, 'You do not have permission to edit this post.')
+        return redirect('news_feed')
+    form = NewsPostForm(request.POST or None, request.FILES or None, instance=post)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Post updated successfully.')
+        return redirect('news_feed')
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Edit post', 'form': form})
+
+
+@login_required
+@require_POST
+def delete_post(request, pk):
+    post = get_object_or_404(NewsPost, pk=pk)
+    if post.author != request.user:
+        messages.error(request, 'You do not have permission to delete this post.')
+        return redirect('news_feed')
+    post.delete()
+    messages.success(request, 'Post deleted successfully.')
+    return redirect('news_feed')
+
+
+@login_required
+@require_POST
+def add_comment(request, pk):
+    post = get_object_or_404(NewsPost, pk=pk)
+    form = NewsCommentForm(request.POST)
+    if form.is_valid():
+        NewsComment.objects.create(post=post, author=request.user, content=form.cleaned_data['content'])
+        if post.author != request.user:
+            create_notification(
+                post.author,
+                'New comment',
+                f'{request.user.username} commented on your post.',
+                'comment',
+                '/feed/',
+            )
+        messages.success(request, 'Comment added successfully.')
+    else:
+        add_form_error_messages(request, form)
+    return redirect('news_feed')
+
+
+@login_required
+def edit_comment(request, pk):
+    comment = get_object_or_404(NewsComment.objects.select_related('author'), pk=pk)
+    if comment.author != request.user:
+        messages.error(request, 'You do not have permission to edit this comment.')
+        return redirect('news_feed')
+    form = NewsCommentForm(request.POST or None, instance=comment)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Comment updated successfully.')
+        return redirect('news_feed')
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Edit comment', 'form': form})
+
+
+@login_required
+@require_POST
+def delete_comment(request, pk):
+    comment = get_object_or_404(NewsComment.objects.select_related('author'), pk=pk)
+    if comment.author != request.user:
+        messages.error(request, 'You do not have permission to delete this comment.')
+        return redirect('news_feed')
+    comment.delete()
+    messages.success(request, 'Comment deleted successfully.')
+    return redirect('news_feed')
+
+
+@login_required
+@require_POST
+def react_post(request, pk, reaction):
+    post = get_object_or_404(NewsPost, pk=pk)
+    if reaction not in {'like', 'dislike'}:
+        messages.error(request, 'Invalid reaction.')
+        return redirect('news_feed')
+    existing = NewsReaction.objects.filter(post=post, user=request.user).first()
+    if existing and existing.reaction == reaction:
+        existing.delete()
+    elif existing:
+        existing.reaction = reaction
+        existing.save(update_fields=['reaction', 'updated_at'])
+    else:
+        NewsReaction.objects.create(post=post, user=request.user, reaction=reaction)
+    return redirect('news_feed')
+
+
+@staff_required
+def management_dashboard(request):
+    pending_requests = LeagueJoinRequest.objects.select_related('league', 'player__user').filter(status='pending')
+    pending_friendly_requests = FriendlyMatchRequest.objects.select_related('requester__user', 'opponent__user').filter(status='pending')[:10]
+    pending_notifications = Notification.objects.select_related('user').filter(is_read=False)[:10]
+    matches = Match.objects.select_related('home_player__user', 'away_player__user').order_by('-created_at')[:20]
+    return render(request, 'core/management_dashboard.html', {
+        'pending_requests': pending_requests,
+        'pending_friendly_requests': pending_friendly_requests,
+        'pending_notifications': pending_notifications,
+        'matches': matches,
+        'league_count': League.objects.count(),
+        'player_count': PlayerProfile.objects.count(),
+        'match_count': Match.objects.count(),
+        'tournament_count': Tournament.objects.count(),
+    })
+
+
+@staff_required
+def create_league(request):
+    form = LeagueForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        league = form.save(commit=False)
+        league.organizer = request.user
+        league.save()
+        messages.success(request, 'Created successfully.')
+        return redirect('league_detail', slug=league.slug)
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Create league', 'form': form})
+
+
+@staff_required
+def create_season(request):
+    form = SeasonForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        season = form.save()
+        messages.success(request, 'Created successfully.')
+        return redirect('league_detail', slug=season.league.slug)
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Create season', 'form': form})
+
+
+@staff_required
+def create_division(request):
+    form = DivisionForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        division = form.save()
+        messages.success(request, 'Created successfully.')
+        return redirect('division_detail', pk=division.pk)
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Create division', 'form': form})
+
+
+@staff_required
+def create_division_membership(request):
+    form = DivisionMembershipForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Created successfully.')
+        return redirect('management_dashboard')
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Assign player to division', 'form': form})
+
+
+def generate_round_robin(players, double_round=False):
+    rounds = []
+    for round_number, (home, away) in enumerate(combinations(players, 2), start=1):
+        rounds.append((round_number, home, away))
+        if double_round:
+            rounds.append((round_number + len(players) * len(players), away, home))
+    return rounds
+
+
+@staff_required
+def create_calendar(request):
+    form = CalendarGenerationForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        division = form.cleaned_data['division']
+        players = list(PlayerProfile.objects.filter(division_memberships__division=division, division_memberships__is_active=True).select_related('user'))
+        if len(players) < 2:
+            messages.error(request, 'This division needs at least 2 players to generate a calendar.')
+            return redirect('create_calendar')
+        if Match.objects.filter(division=division, match_type='official').exists():
+            messages.error(request, 'Calendar already exists for this division.')
+            return redirect('calendar')
+        with transaction.atomic():
+            for round_number, home, away in generate_round_robin(players, form.cleaned_data['double_round_robin']):
+                Match.objects.create(match_type='official', league=division.season.league, season=division.season, division=division, home_player=home, away_player=away, round_number=round_number, status='scheduled', created_by=request.user)
+        messages.success(request, 'Calendar created successfully.')
+        return redirect('calendar')
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Create Calendar', 'form': form})
+
+
+@staff_required
+def create_match(request):
+    form = MatchForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        match = form.save(commit=False)
+        match.created_by = request.user
+        if match.division:
+            match.league = match.division.season.league
+            match.season = match.division.season
+        match.save()
+        notify_match_scheduled(match)
+        messages.success(request, 'Created successfully.')
+        return redirect('calendar')
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Create match', 'form': form})
+
+
+@staff_required
+def update_match_score(request, pk):
+    match = get_object_or_404(Match, pk=pk)
+    form = MatchForm(request.POST or None, instance=match)
+    if request.method == 'POST' and form.is_valid():
+        match = form.save(commit=False)
+        if match.status == 'played' and not match.played_at:
+            match.played_at = timezone.now()
+        match.save()
+        messages.success(request, 'Score saved successfully.')
+        return redirect('calendar')
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Update match / score', 'form': form})
+
+
+@staff_required
+@require_POST
+def handle_join_request(request, pk, action):
+    req = get_object_or_404(LeagueJoinRequest, pk=pk, status='pending')
+    if action == 'accept':
+        LeagueMembership.objects.update_or_create(league=req.league, player=req.player, defaults={'status': 'active', 'role': 'player'})
+        req.status = 'accepted'
+        messages.success(request, f'{req.player} accepted into {req.league}.')
+    elif action == 'reject':
+        req.status = 'rejected'
+        messages.info(request, 'Join request rejected.')
+    req.reviewed_by = request.user
+    req.reviewed_at = timezone.now()
+    req.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'updated_at'])
+    return redirect('management_dashboard')
+
+
+def season_outcome_view(request, season_id):
+    season = get_object_or_404(Season.objects.select_related('league'), pk=season_id)
+    return render(request, 'core/season_outcome.html', {'season': season, 'rows': season_outcomes(season)})
+
+
+@staff_required
+@require_POST
+def apply_promotion_relegation(request, season_id):
+    season = get_object_or_404(Season, pk=season_id, status='completed')
+    if season.promotions_applied:
+        messages.error(request, 'Promotion/relegation has already been applied.')
+        return redirect('season_outcome', season_id=season.pk)
+    rows = season_outcomes(season)
+    with transaction.atomic():
+        for row in rows:
+            if row['outcome'] in {'Promoted', 'Relegated'} and row['target']:
+                DivisionMembership.objects.update_or_create(division=row['target'], player=row['player'], defaults={'is_active': True})
+        season.promotions_applied = True
+        season.save(update_fields=['promotions_applied', 'updated_at'])
+    messages.success(request, 'Promotion/relegation applied.')
+    return redirect('season_outcome', season_id=season.pk)
+
+
+def tournament_list(request):
+    tournaments = Tournament.objects.all()
+    return render(request, 'core/tournament_list.html', {'tournaments': tournaments})
+
+
+def tournament_detail(request, slug):
+    tournament = get_object_or_404(Tournament, slug=slug)
+    groups = tournament.groups.prefetch_related('memberships__participant__player__user', 'matches__home_player__user', 'matches__away_player__user')
+    group_tables = []
+    for group in groups:
+        players = [m.participant.player for m in group.memberships.all()]
+        group_tables.append((group, tournament_group_stats(group.matches.filter(status='played'), players)))
+    knockout = tournament.matches.select_related('home_player__user', 'away_player__user', 'winner__user').exclude(stage='group')
+    selected_participants = tournament.participants.select_related('player__user').filter(status='selected')
+    reserve_participants = tournament.participants.select_related('player__user').filter(status='reserve')
+    return render(request, 'core/tournament_detail.html', {
+        'tournament': tournament,
+        'groups': groups,
+        'group_tables': group_tables,
+        'knockout': knockout,
+        'selected_participants': selected_participants,
+        'reserve_participants': reserve_participants,
+        'next_stage_format': next_stage_format(tournament.groups.count()),
+    })
+
+
+@staff_required
+def create_tournament(request):
+    form = TournamentForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        tournament = form.save()
+        messages.success(request, 'Tournament created successfully.')
+        return redirect('tournament_detail', slug=tournament.slug)
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Create tournament', 'form': form})
+
+
+@staff_required
+def add_tournament_participant(request, slug):
+    tournament = get_object_or_404(Tournament, slug=slug)
+    if tournament.participants.count() >= tournament.max_participants:
+        messages.error(request, 'Tournament is full.')
+        return redirect('tournament_detail', slug=slug)
+    form = TournamentParticipantForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        participant = form.save(commit=False)
+        participant.tournament = tournament
+        participant.seed = tournament.participants.count() + 1
+        participant.save()
+        messages.success(request, 'Created successfully.')
+        return redirect('tournament_detail', slug=slug)
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': f'Add participant to {tournament.name}', 'form': form})
+
+
+def ranked_eligible_players():
+    players = list(PlayerProfile.objects.select_related('user').filter(user__is_active=True, is_public=True))
+    matches = Match.objects.select_related('home_player__user', 'away_player__user').filter(status='played')
+    stats_by_player = {row['player'].id: row for row in compute_player_stats(matches, players=players)}
+    return sorted(
+        players,
+        key=lambda player: (
+            -stats_by_player[player.id]['points'],
+            -stats_by_player[player.id]['goal_diff'],
+            -stats_by_player[player.id]['wins'],
+            -stats_by_player[player.id]['played'],
+            player.user.username.lower(),
+        ),
+    )
+
+
+def next_stage_format(group_count):
+    if group_count == 8:
+        return 'Round of 16'
+    if group_count == 4:
+        return 'Quarter-finals'
+    if group_count == 2:
+        return 'Semi-finals'
+    if group_count == 1:
+        return 'Final ranking or final between top 2'
+    if group_count:
+        return 'Manual/adapted knockout required'
+    return 'Groups not generated yet'
+
+
+def create_group_fixtures(tournament):
+    for group in tournament.groups.all():
+        players = [m.participant.player for m in group.memberships.select_related('participant__player')]
+        for round_number, (home, away) in enumerate(combinations(players, 2), start=1):
+            TournamentMatch.objects.get_or_create(
+                tournament=tournament,
+                group=group,
+                stage='group',
+                home_player=home,
+                away_player=away,
+                defaults={'round_number': round_number},
+            )
+
+
+@staff_required
+@require_POST
+def generate_tournament_groups(request, slug):
+    tournament = get_object_or_404(Tournament, slug=slug)
+    if tournament.groups_generated:
+        messages.error(request, 'Groups already generated for this tournament.')
+        return redirect('tournament_detail', slug=slug)
+
+    eligible_players = ranked_eligible_players()
+    eligible_count = len(eligible_players)
+    if eligible_count < 4:
+        messages.error(request, 'At least 4 eligible players are required.')
+        return redirect('tournament_detail', slug=slug)
+
+    max_players = min(32, tournament.max_participants or 32)
+    capped_players = eligible_players[:max_players]
+    selected_count = (len(capped_players) // 4) * 4
+    selected_players = capped_players[:selected_count]
+    reserve_players = capped_players[selected_count:] + eligible_players[max_players:]
+    group_count = selected_count // 4
+
+    with transaction.atomic():
+        tournament.participants.all().delete()
+        tournament.groups.all().delete()
+        tournament.matches.all().delete()
+
+        selected_participants = []
+        for seed, player in enumerate(selected_players, start=1):
+            selected_participants.append(TournamentParticipant.objects.create(tournament=tournament, player=player, seed=seed, status='selected'))
+        for seed, player in enumerate(reserve_players, start=selected_count + 1):
+            TournamentParticipant.objects.create(tournament=tournament, player=player, seed=seed, status='reserve')
+
+        groups = [TournamentGroup.objects.create(tournament=tournament, name=chr(65 + i)) for i in range(group_count)]
+        pots = [selected_participants[index:index + group_count] for index in range(0, selected_count, group_count)]
+        for pot_index, pot in enumerate(pots):
+            ordered_groups = groups if pot_index % 2 == 0 else list(reversed(groups))
+            for group, participant in zip(ordered_groups, pot):
+                TournamentGroupMembership.objects.create(group=group, participant=participant)
+
+        create_group_fixtures(tournament)
+        tournament.groups_generated = True
+        tournament.group_fixtures_generated = True
+        tournament.status = 'group_stage'
+        tournament.save(update_fields=['groups_generated', 'group_fixtures_generated', 'status', 'updated_at'])
+
+    if reserve_players:
+        messages.info(request, f'{eligible_count} eligible players found. {selected_count} selected and {len(reserve_players)} added to reserves.')
+    messages.success(request, f'{selected_count} players selected. {group_count} groups generated.')
+    messages.success(request, 'Tournament groups generated successfully.')
+    return redirect('tournament_detail', slug=slug)
+
+
+@staff_required
+@require_POST
+def generate_group_fixtures(request, slug):
+    tournament = get_object_or_404(Tournament, slug=slug, groups_generated=True)
+    if tournament.group_fixtures_generated:
+        messages.error(request, 'Group fixtures already generated.')
+        return redirect('tournament_detail', slug=slug)
+    create_group_fixtures(tournament)
+    tournament.group_fixtures_generated = True
+    tournament.status = 'group_stage'
+    tournament.save(update_fields=['group_fixtures_generated', 'status', 'updated_at'])
+    messages.success(request, 'Group fixtures generated.')
+    return redirect('tournament_detail', slug=slug)
+
+
+def qualified_players(tournament):
+    qualified = []
+    for group in tournament.groups.all():
+        players = [m.participant.player for m in group.memberships.select_related('participant__player__user')]
+        table = tournament_group_stats(group.matches.filter(status='played'), players)
+        qualified.extend(table[:2])
+    return [row['player'] for row in qualified]
+
+
+@staff_required
+@require_POST
+def generate_knockout(request, slug):
+    tournament = get_object_or_404(Tournament, slug=slug, group_fixtures_generated=True)
+    if tournament.knockout_generated:
+        messages.error(request, 'Knockout stage already generated.')
+        return redirect('tournament_detail', slug=slug)
+    if tournament.matches.filter(stage='group').exclude(status='played').exists():
+        messages.error(request, 'All group matches must be played before knockout generation.')
+        return redirect('tournament_detail', slug=slug)
+    players = qualified_players(tournament)
+    if len(players) < 4:
+        messages.error(request, 'Not enough qualified players.')
+        return redirect('tournament_detail', slug=slug)
+    if len(players) not in {4, 8, 16}:
+        messages.error(request, f'{len(players)} qualified players require a manual/adapted knockout format.')
+        return redirect('tournament_detail', slug=slug)
+    stage = 'round_of_16' if len(players) == 16 else 'quarter_final' if len(players) == 8 else 'semi_final'
+    for idx in range(0, len(players), 2):
+        TournamentMatch.objects.create(tournament=tournament, stage=stage, round_number=1, home_player=players[idx], away_player=players[idx + 1])
+    tournament.knockout_generated = True
+    tournament.status = 'knockout'
+    tournament.save(update_fields=['knockout_generated', 'status', 'updated_at'])
+    messages.success(request, 'Knockout stage generated.')
+    return redirect('tournament_detail', slug=slug)
+
+
+@staff_required
+def update_tournament_match(request, pk):
+    match = get_object_or_404(TournamentMatch.objects.select_related('tournament'), pk=pk)
+    form = TournamentMatchScoreForm(request.POST or None, instance=match)
+    if request.method == 'POST' and form.is_valid():
+        match = form.save()
+        if match.stage == 'group' and match.status == 'played':
+            if match.home_score > match.away_score:
+                match.winner = match.home_player
+            elif match.away_score > match.home_score:
+                match.winner = match.away_player
+            else:
+                match.winner = None
+            match.save(update_fields=['winner', 'updated_at'])
+        maybe_advance_knockout(match.tournament)
+        messages.success(request, 'Score saved successfully.')
+        return redirect('tournament_detail', slug=match.tournament.slug)
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Update tournament match', 'form': form})
+
+
+def next_stage(stage):
+    return {'round_of_16': 'quarter_final', 'quarter_final': 'semi_final', 'semi_final': 'final'}.get(stage)
+
+
+def maybe_advance_knockout(tournament):
+    stages = ['round_of_16', 'quarter_final', 'semi_final', 'final']
+    for stage in stages:
+        matches = list(tournament.matches.filter(stage=stage))
+        if not matches or any(m.status != 'played' or not m.winner for m in matches):
+            continue
+        if stage == 'final':
+            tournament.champion = matches[0].winner
+            tournament.status = 'completed'
+            tournament.save(update_fields=['champion', 'status', 'updated_at'])
+            return
+        target = next_stage(stage)
+        if tournament.matches.filter(stage=target).exists():
+            return
+        winners = [m.winner for m in matches]
+        for idx in range(0, len(winners), 2):
+            TournamentMatch.objects.create(tournament=tournament, stage=target, round_number=matches[0].round_number + 1, home_player=winners[idx], away_player=winners[idx + 1])
+        return

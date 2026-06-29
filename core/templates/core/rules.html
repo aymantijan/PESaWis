@@ -1,0 +1,228 @@
+{% extends 'core/base.html' %}
+{% block title %}Rules - PESOS{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Rules</h1></section>
+
+<nav class="language-switch" aria-label="Rules language">
+  <a class="{% if active_lang == 'en' %}active{% endif %}" href="{% url 'rules' %}?lang=en">English</a>
+  <a class="{% if active_lang == 'fr' %}active{% endif %}" href="{% url 'rules' %}?lang=fr">Français</a>
+  <a class="{% if active_lang == 'ar' %}active{% endif %}" href="{% url 'rules' %}?lang=ar">العربية</a>
+</nav>
+
+{% if active_lang == 'fr' %}
+<section class="rules-page">
+  <h2>Règlement</h2>
+  <h3>1. Principes généraux</h3>
+  <p>PESaWis est une plateforme de ligue compétitive PES/eFootball. Tous les joueurs doivent respecter le fair-play, la ponctualité, l’honnêteté et les décisions de l’administration.</p>
+  <p>Ces règles sont inspirées de la logique des compétitions de football et du gameplay eFootball. Elles ne sont pas des règles officielles FIFA ou Konami.</p>
+
+  <h3>2. Identité du joueur</h3>
+  <p>Chaque joueur doit utiliser un seul compte.</p>
+  <p>Chaque profil joueur doit contenir :</p>
+  <ul><li>nom d’utilisateur ;</li><li>nom complet ;</li><li>ID Konami.</li></ul>
+  <p>Un joueur ne peut pas participer avec le compte d’une autre personne. Si un joueur change son ID Konami, il doit informer l’admin avant de jouer des matchs officiels.</p>
+
+  <h3>3. Règles des matchs de championnat</h3>
+  <p>Chaque match de championnat oppose deux joueurs inscrits dans la même division ou compétition.</p>
+  <ul><li>Victoire = 3 points</li><li>Match nul = 1 point</li><li>Défaite = 0 point</li></ul>
+  <p>Un match joué doit avoir un score final. Un joueur ne doit pas déclarer un faux score. Les deux joueurs doivent confirmer le résultat si possible.</p>
+  <p>En cas de litige, l’admin peut demander des captures d’écran, une vidéo ou les messages échangés entre les joueurs.</p>
+
+  <h3>4. Règles de classement</h3>
+  <ol><li>Points</li><li>Différence de buts</li><li>Buts marqués</li><li>Nombre de victoires</li><li>Confrontation directe si disponible</li><li>Nom d’utilisateur par ordre alphabétique en dernier recours</li></ol>
+  <p>Si le système ne peut pas départager automatiquement deux joueurs, la décision de l’admin est finale.</p>
+
+  <h3>5. Promotion et relégation</h3>
+  <p>Dans la division Elite, les deux premiers joueurs sont considérés comme champions ou vainqueurs de la saison.</p>
+  <p>Dans la division Elite, les deux derniers descendent à la division inférieure.</p>
+  <ul><li>Dans les divisions inférieures, les deux premiers montent à la division supérieure.</li><li>Les deux derniers descendent à la division inférieure s’il en existe une.</li><li>S’il n’existe pas de division inférieure, les derniers restent dans la même division sauf décision contraire de l’admin.</li></ul>
+  <p>La promotion et la relégation ne sont appliquées qu’après la fin de la saison et la validation de l’admin.</p>
+
+  <h3>6. Programmation des matchs</h3>
+  <p>Les joueurs doivent respecter le calendrier officiel.</p>
+  <p>Si un joueur ne peut pas jouer à l’heure prévue, il doit contacter son adversaire et l’admin le plus tôt possible.</p>
+  <ul><li>L’admin peut reprogrammer le match.</li><li>Attribuer une défaite par forfait.</li><li>Envoyer un avertissement.</li><li>Retirer le joueur de la compétition.</li></ul>
+
+  <h3>7. Déconnexion et problèmes Internet</h3>
+  <p>Si un joueur perd la connexion pendant un match officiel, le match doit être rejoué dans un délai maximum de 12 heures après la déconnexion.</p>
+  <p>Le match ne recommence pas à 0-0. Il doit reprendre avec le même score que celui présent au moment de la déconnexion.</p>
+  <ul><li>Si le score était de 2-1, le match rejoué reprend en considérant le score comme 2-1.</li><li>Le temps restant ou le format de reprise est décidé par l’admin si le jeu ne permet pas une reprise exacte.</li></ul>
+  <p>Cette règle est limitée à un seul cas de déconnexion par match.</p>
+  <p>Si le même match est interrompu une deuxième fois à cause d’une nouvelle déconnexion du même joueur, l’admin peut décider :</p>
+  <ul><li>de valider le score actuel ;</li><li>d’attribuer une défaite par forfait ;</li><li>de reprogrammer seulement dans un cas exceptionnel ;</li><li>d’appliquer une sanction si la déconnexion semble abusive ou volontaire.</li></ul>
+  <p>Score standard de forfait : 3-0. Si le score réel était plus lourd que 3-0, l’admin peut conserver le score réel.</p>
+  <p>Les joueurs doivent fournir une preuve si possible : score au moment de la déconnexion, capture de la déconnexion, vidéo ou messages.</p>
+  <p>Si les joueurs ne rejouent pas le match dans les 12 heures, l’admin prendra la décision finale selon les preuves disponibles.</p>
+
+  <h3>8. Fair-play et comportements interdits</h3>
+  <ul><li>Insulter ou menacer un autre joueur.</li><li>Déclarer de faux scores.</li><li>Utiliser le compte d’un autre joueur.</li><li>Quitter volontairement un match.</li><li>Abuser des problèmes de connexion.</li><li>Manipuler les résultats.</li><li>Spammer ou abuser du fil d’actualité.</li><li>Publier du contenu offensant.</li></ul>
+  <p>Les sanctions possibles incluent avertissement, défaite sur tapis vert, retrait de points, suspension temporaire ou bannissement définitif.</p>
+
+  <h3>9. Matchs amicaux</h3>
+  <p>Les matchs amicaux ne comptent pas dans le classement officiel sauf décision claire de l’admin.</p>
+  <p>Un joueur peut envoyer une demande de match amical à un autre joueur. L’adversaire peut accepter ou refuser.</p>
+
+  <h3>10. Phase de groupes des tournois</h3>
+  <ul><li>Taille maximale du tournoi : 32 joueurs.</li><li>Les groupes contiennent normalement 4 joueurs.</li><li>Chaque joueur affronte les autres joueurs de son groupe.</li><li>Victoire = 3 points.</li><li>Match nul = 1 point.</li><li>Défaite = 0 point.</li><li>Les deux premiers de chaque groupe se qualifient pour le tour suivant.</li></ul>
+  <p>S’il y a plus de 32 joueurs éligibles, le système sélectionne les 32 meilleurs joueurs selon le classement, l’historique et les performances.</p>
+  <p>Si le nombre de joueurs n’est pas un multiple de 4, le système peut sélectionner le multiple de 4 inférieur le plus proche et placer les autres joueurs en réserve.</p>
+  <p>Il faut au moins 4 joueurs éligibles pour générer les groupes d’un tournoi.</p>
+
+  <h3>11. Règles de classement des groupes</h3>
+  <ol><li>Points</li><li>Différence de buts</li><li>Buts marqués</li><li>Nombre de victoires</li><li>Confrontation directe si disponible</li><li>Nom d’utilisateur par ordre alphabétique</li></ol>
+  <p>Les deux premiers de chaque groupe se qualifient pour la phase à élimination directe.</p>
+
+  <h3>12. Phase à élimination directe</h3>
+  <p>Dans les matchs à élimination directe, il doit y avoir un vainqueur. Si le match se termine sur un nul, le vainqueur doit être déterminé selon les paramètres du match, les tirs au but, ou la décision de l’admin.</p>
+  <p>Le vainqueur passe au tour suivant. Le perdant est éliminé. Le champion du tournoi est le vainqueur de la finale.</p>
+
+  <h3>13. Preuves et décisions admin</h3>
+  <p>L’admin peut demander une preuve pour tout match, résultat, problème de connexion ou litige.</p>
+  <p>Les preuves acceptées incluent captures du score final ou de la déconnexion, vidéo courte, messages entre joueurs et historique du match dans le jeu.</p>
+  <p>Si les preuves sont insuffisantes, l’admin décide selon les informations disponibles et les principes de fair-play. La décision de l’admin est finale.</p>
+</section>
+{% elif active_lang == 'ar' %}
+<section class="rules-page rules-rtl" dir="rtl" lang="ar">
+  <h2>القوانين</h2>
+  <h3>1. المبادئ العامة</h3>
+  <p>PESaWis هي منصة لتنظيم دوري تنافسي في PES/eFootball. يجب على جميع اللاعبين احترام الروح الرياضية، الالتزام بالمواعيد، الصدق، وقرارات الإدارة.</p>
+  <p>هذه القواعد مستوحاة من منطق مسابقات كرة القدم وطريقة اللعب في eFootball، وليست قواعد رسمية صادرة عن FIFA أو Konami.</p>
+
+  <h3>2. هوية اللاعب</h3>
+  <p>يجب على كل لاعب استعمال حساب واحد فقط.</p>
+  <p>يجب أن يحتوي ملف كل لاعب على اسم المستخدم، الاسم الكامل، و Konami ID.</p>
+  <p>لا يسمح لأي لاعب بالمشاركة بحساب شخص آخر. إذا غيّر اللاعب Konami ID، يجب عليه إخبار الإدارة قبل لعب أي مباراة رسمية.</p>
+
+  <h3>3. قواعد مباريات الدوري</h3>
+  <p>كل مباراة في الدوري تلعب بين لاعبين مسجلين في نفس القسم أو نفس المسابقة.</p>
+  <ul><li>الفوز = 3 نقاط</li><li>التعادل = نقطة واحدة</li><li>الخسارة = 0 نقطة</li></ul>
+  <p>كل مباراة ملعوبة يجب أن يكون لها score نهائي. يمنع تسجيل نتيجة مزيفة. من الأفضل أن يؤكد اللاعبان النتيجة عند الإمكان.</p>
+  <p>في حالة وجود نزاع، يمكن للإدارة طلب صور، فيديو، أو رسائل بين اللاعبين.</p>
+
+  <h3>4. قواعد الترتيب</h3>
+  <ol><li>عدد النقاط</li><li>فارق الأهداف</li><li>عدد الأهداف المسجلة</li><li>عدد الانتصارات</li><li>نتيجة المواجهة المباشرة إذا كانت متوفرة</li><li>اسم المستخدم حسب الترتيب الأبجدي كحل أخير</li></ol>
+  <p>إذا لم يستطع النظام حسم التعادل تلقائياً، فإن قرار الإدارة يكون نهائياً.</p>
+
+  <h3>5. الصعود والنزول</h3>
+  <p>في قسم Elite، اللاعبان في المركزين الأول والثاني يعتبران أبطال الموسم أو الفائزين به.</p>
+  <p>في قسم Elite، اللاعبان في آخر مركزين ينزلان إلى القسم الأدنى.</p>
+  <ul><li>في الأقسام الأخرى، أول لاعبين يصعدان إلى القسم الأعلى.</li><li>آخر لاعبين ينزلان إلى القسم الأدنى إذا كان موجوداً.</li><li>إذا لم يكن هناك قسم أدنى، يبقى اللاعبون في نفس القسم إلا إذا قررت الإدارة غير ذلك.</li></ul>
+  <p>لا يتم تطبيق الصعود والنزول إلا بعد نهاية الموسم وموافقة الإدارة.</p>
+
+  <h3>6. برمجة المباريات</h3>
+  <p>يجب على اللاعبين احترام الجدول الرسمي.</p>
+  <p>إذا لم يستطع اللاعب لعب المباراة في الوقت المحدد، يجب عليه التواصل مع الخصم والإدارة في أقرب وقت ممكن.</p>
+  <ul><li>يمكن للإدارة إعادة برمجة المباراة.</li><li>احتساب خسارة بالانسحاب.</li><li>إرسال إنذار.</li><li>حذف اللاعب من المسابقة.</li></ul>
+
+  <h3>7. انقطاع الاتصال ومشاكل الإنترنت</h3>
+  <p>إذا فقد أحد اللاعبين الاتصال أثناء مباراة رسمية، يجب إعادة لعب المباراة خلال مدة أقصاها 12 ساعة بعد انقطاع الاتصال.</p>
+  <p>لا تعاد المباراة من 0-0. يجب أن تستكمل بنفس النتيجة التي كانت موجودة لحظة انقطاع الاتصال.</p>
+  <ul><li>إذا كانت النتيجة 2-1 عند الانقطاع، فإن المباراة المعادة تستكمل باعتبار النتيجة 2-1.</li><li>الوقت المتبقي أو طريقة الاستكمال يحددها المسؤول إذا كانت اللعبة لا تسمح باستكمال دقيق من نفس اللحظة.</li></ul>
+  <p>هذه القاعدة مسموحة مرة واحدة فقط في نفس المباراة.</p>
+  <p>إذا انقطعت نفس المباراة مرة ثانية بسبب نفس اللاعب، يمكن للإدارة أن تقرر:</p>
+  <ul><li>اعتماد النتيجة الحالية؛</li><li>احتساب خسارة بالانسحاب؛</li><li>إعادة البرمجة فقط في حالة استثنائية؛</li><li>تطبيق عقوبة إذا كان الانقطاع متعمداً أو متكرراً بشكل غير مقبول.</li></ul>
+  <p>نتيجة الانسحاب الافتراضية هي 3-0. إذا كانت النتيجة الحقيقية أكبر من 3-0، يمكن للإدارة اعتماد النتيجة الحقيقية.</p>
+  <p>يجب على اللاعبين تقديم دليل إن أمكن: صورة للنتيجة لحظة الانقطاع، صورة لمشكلة الاتصال، فيديو، أو الرسائل المتبادلة.</p>
+  <p>إذا لم تتم إعادة لعب المباراة خلال 12 ساعة، تتخذ الإدارة القرار النهائي حسب الأدلة المتوفرة.</p>
+
+  <h3>8. الروح الرياضية والسلوك الممنوع</h3>
+  <ul><li>سب أو تهديد لاعب آخر.</li><li>تسجيل نتائج مزيفة.</li><li>استعمال حساب لاعب آخر.</li><li>الخروج عمداً من المباراة.</li><li>استغلال مشاكل الاتصال.</li><li>التلاعب بالنتائج.</li><li>نشر spam أو إساءة استعمال المنشورات.</li><li>نشر محتوى مسيء.</li></ul>
+  <p>العقوبات الممكنة تشمل إنذاراً، خسارة المباراة، خصم نقاط، إيقافاً مؤقتاً، أو حظراً نهائياً.</p>
+
+  <h3>9. المباريات الودية</h3>
+  <p>المباريات الودية لا تؤثر على ترتيب الدوري الرسمي إلا إذا قررت الإدارة غير ذلك بشكل واضح.</p>
+  <p>يمكن لأي لاعب إرسال طلب مباراة ودية إلى لاعب آخر. يمكن للخصم قبول الطلب أو رفضه.</p>
+
+  <h3>10. مرحلة المجموعات في البطولات</h3>
+  <ul><li>الحد الأقصى للبطولة: 32 لاعباً.</li><li>كل مجموعة تحتوي غالباً على 4 لاعبين.</li><li>كل لاعب يواجه باقي لاعبي مجموعته.</li><li>الفوز = 3 نقاط.</li><li>التعادل = نقطة واحدة.</li><li>الخسارة = 0 نقطة.</li><li>أول لاعبين من كل مجموعة يتأهلان إلى الدور التالي.</li></ul>
+  <p>إذا كان هناك أكثر من 32 لاعباً مؤهلاً، يختار النظام أفضل 32 لاعباً حسب الترتيب، التاريخ، والأداء.</p>
+  <p>إذا لم يكن عدد اللاعبين من مضاعفات 4، يمكن للنظام اختيار أقرب عدد أقل من مضاعفات 4 ووضع باقي اللاعبين في الاحتياط.</p>
+  <p>يجب توفر 4 لاعبين مؤهلين على الأقل لإنشاء مجموعات البطولة.</p>
+
+  <h3>11. قواعد ترتيب المجموعات</h3>
+  <ol><li>عدد النقاط</li><li>فارق الأهداف</li><li>عدد الأهداف المسجلة</li><li>عدد الانتصارات</li><li>المواجهة المباشرة إذا كانت متوفرة</li><li>اسم المستخدم حسب الترتيب الأبجدي كحل أخير</li></ol>
+  <p>أول لاعبين من كل مجموعة يتأهلان إلى مرحلة خروج المغلوب.</p>
+
+  <h3>12. مرحلة خروج المغلوب</h3>
+  <p>في مباريات خروج المغلوب، يجب أن يكون هناك فائز. إذا انتهت المباراة بالتعادل، يتم تحديد الفائز حسب إعدادات المباراة، ضربات الترجيح، أو قرار الإدارة.</p>
+  <p>الفائز يمر إلى الدور التالي، والخاسر يخرج من البطولة. بطل البطولة هو الفائز في المباراة النهائية.</p>
+
+  <h3>13. الأدلة وقرارات الإدارة</h3>
+  <p>يمكن للإدارة طلب دليل في أي مباراة أو نتيجة أو مشكلة اتصال أو نزاع.</p>
+  <p>الأدلة المقبولة تشمل صورة للنتيجة النهائية، صورة لمشكلة الاتصال، فيديو قصير، رسائل بين اللاعبين، وسجل المباراة داخل اللعبة.</p>
+  <p>إذا لم تكن الأدلة كافية، تقرر الإدارة بناءً على المعلومات المتوفرة ومبادئ الروح الرياضية. قرار الإدارة نهائي.</p>
+</section>
+{% else %}
+<section class="rules-page">
+  <h2>English</h2>
+  <h3>1. General Principles</h3>
+  <p>PESaWis is a competitive PES/eFootball league platform. All players must respect fair play, punctuality, honesty, and the decisions of the admin team.</p>
+  <p>These rules are inspired by football competition logic and eFootball gameplay. They are not official FIFA or Konami rules.</p>
+
+  <h3>2. Player Identity</h3>
+  <p>Each player must use one account only.</p>
+  <p>Each player profile must include username, full name, and Konami ID.</p>
+  <p>A player cannot participate with another person’s account. If a player changes his Konami ID, he must inform the admin before playing official matches.</p>
+
+  <h3>3. League Match Rules</h3>
+  <p>Each league match is played between two registered players assigned to the same division or competition.</p>
+  <ul><li>Win = 3 points</li><li>Draw = 1 point</li><li>Loss = 0 points</li></ul>
+  <p>A played match must have a final score. A player must not report a false score. Both players should confirm the result when possible.</p>
+  <p>If there is a dispute, the admin may request screenshots, video proof, or chat messages.</p>
+
+  <h3>4. Standings Rules</h3>
+  <ol><li>Points</li><li>Goal difference</li><li>Goals scored</li><li>Number of wins</li><li>Head-to-head result if available</li><li>Username alphabetical order as final fallback</li></ol>
+  <p>If the system cannot resolve a tie automatically, the admin decision is final.</p>
+
+  <h3>5. Promotion and Relegation</h3>
+  <p>In the Elite division, the top two players are considered champions or season winners.</p>
+  <p>In the Elite division, the bottom two players are relegated to the lower division.</p>
+  <ul><li>In lower divisions, the top two players are promoted to the division above.</li><li>The bottom two players are relegated to the division below if another lower division exists.</li><li>If there is no lower division, the bottom players remain in the same division unless the admin decides otherwise.</li></ul>
+  <p>Promotion and relegation are applied only after the season is completed and validated by the admin.</p>
+
+  <h3>6. Match Scheduling</h3>
+  <p>Players must respect the official calendar.</p>
+  <p>If a player cannot play at the scheduled time, he must contact the opponent and the admin as early as possible.</p>
+  <ul><li>The admin may reschedule the match.</li><li>Award a forfeit loss.</li><li>Issue a warning.</li><li>Remove the player from the competition.</li></ul>
+
+  <h3>7. Disconnection and Internet Problems</h3>
+  <p>If a player loses connection during an official match, the match must be replayed within 12 hours after the disconnection.</p>
+  <p>The replay does not restart from 0-0. The match must continue with the same score that existed at the moment of disconnection.</p>
+  <ul><li>If the score was 2-1 when the connection was lost, the replay starts with the score considered as 2-1.</li><li>The remaining time or replay format is decided by the admin if the game does not allow an exact continuation.</li></ul>
+  <p>This rule is limited to one disconnection case per match.</p>
+  <p>If the same match is interrupted again because of another disconnection by the same player, the admin may apply one of the following decisions:</p>
+  <ul><li>confirm the current score;</li><li>award a forfeit loss;</li><li>reschedule only in exceptional cases;</li><li>apply disciplinary action if the disconnection appears abusive or intentional.</li></ul>
+  <p>Standard forfeit score is 3-0. If the real score was more severe than 3-0, the admin may keep the real score.</p>
+  <p>Both players must provide proof when possible: score screenshot, disconnection screenshot, video proof, or chat messages.</p>
+  <p>If the players do not replay the match within 12 hours, the admin will make the final decision based on the available proof.</p>
+
+  <h3>8. Fair Play and Forbidden Behavior</h3>
+  <ul><li>Insulting or threatening another player.</li><li>Reporting fake scores.</li><li>Using another player’s account.</li><li>Intentionally quitting matches.</li><li>Abusing connection problems.</li><li>Manipulating results.</li><li>Spamming or abusing the news feed.</li><li>Posting offensive content.</li></ul>
+  <p>Sanctions may include warning, match loss, points deduction, temporary suspension, or permanent ban.</p>
+
+  <h3>9. Friendly Matches</h3>
+  <p>Friendly matches do not affect official league standings unless the admin clearly states otherwise.</p>
+  <p>A player may send a friendly match request to another player. The opponent can accept or decline.</p>
+
+  <h3>10. Tournament Group Stage</h3>
+  <ul><li>Maximum tournament size: 32 players.</li><li>Groups normally contain 4 players.</li><li>Each player plays against the other players in the same group.</li><li>Win = 3 points.</li><li>Draw = 1 point.</li><li>Loss = 0 points.</li><li>The top 2 players in each group qualify for the next stage.</li></ul>
+  <p>If there are more than 32 eligible players, the system selects the top 32 players based on ranking, history, and performance.</p>
+  <p>If there are fewer than 32 players, the system uses the available eligible players.</p>
+  <p>If the number of players is not a multiple of 4, the system may select the closest lower multiple of 4 and place the remaining players as reserves.</p>
+  <p>At least 4 eligible players are required to generate tournament groups.</p>
+
+  <h3>11. Group Ranking Rules</h3>
+  <ol><li>Points</li><li>Goal difference</li><li>Goals scored</li><li>Number of wins</li><li>Head-to-head result if available</li><li>Username alphabetical order as final fallback</li></ol>
+  <p>The top 2 players in each group qualify for the knockout stage.</p>
+
+  <h3>12. Knockout Stage</h3>
+  <p>In knockout matches, there must be a winner. If the game ends in a draw, the winner must be decided according to match settings, penalties, or admin decision.</p>
+  <p>The winner advances to the next round. The loser is eliminated. The tournament champion is the winner of the final.</p>
+
+  <h3>13. Proof and Admin Decisions</h3>
+  <p>The admin may request proof for any match, result, disconnection, or dispute.</p>
+  <p>Accepted proof includes final score screenshots, disconnection screenshots, video clips, chat messages, and game history screens.</p>
+  <p>If proof is missing, the admin will decide based on the available information and fair play principles. The admin decision is final.</p>
+</section>
+{% endif %}
+{% endblock %}

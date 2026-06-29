@@ -1,0 +1,8 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ division.name }} · PESOS{% endblock %}
+{% block content %}
+<section class="page-head"><h1>{{ division.name }}</h1><p>{{ division.season.league.name }} · {{ division.season.name }}</p></section>
+<section><h2>Standings</h2>{% if standings %}{% include 'core/partials/standings_table.html' with standings=standings %}{% else %}<div class="empty">Standings will appear after the first results.</div>{% endif %}</section>
+<section><h2>Players</h2><div class="grid three">{% for member in members %}<a class="card" href="{{ member.get_absolute_url }}"><h3>{{ member.user.username }}</h3><p>{{ member.konami_id }}</p></a>{% empty %}<div class="empty wide">No player assigned yet.</div>{% endfor %}</div></section>
+<section><h2>Matches</h2>{% if matches %}{% include 'core/partials/match_table.html' with matches=matches %}{% else %}<div class="empty">Calendar has not been generated yet.</div>{% endif %}</section>
+{% endblock %}

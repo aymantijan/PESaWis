@@ -1,0 +1,15 @@
+{% extends 'core/base.html' %}
+{% block title %}Standings - PESOS{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Standings</h1></section>
+<form class="toolbar">
+  <select name="division">{% for division in divisions %}<option value="{{ division.id }}" {% if selected and selected.id == division.id %}selected{% endif %}>{{ division.name }} - {{ division.season.name }}</option>{% endfor %}</select>
+  <button class="button small">View</button>
+</form>
+{% if selected %}
+  <h2>{{ selected.name }}</h2>
+  {% include 'core/partials/standings_table.html' with standings=standings %}
+{% else %}
+  <div class="empty">No divisions yet.</div>
+{% endif %}
+{% endblock %}

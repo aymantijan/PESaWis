@@ -1,0 +1,10 @@
+{% extends 'core/base.html' %}
+{% block title %}Divisions · PESOS{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Divisions</h1><p>Active public divisions.</p></section>
+<div class="grid three">
+{% for division in divisions %}
+  <article class="card"><h2><a href="{{ division.get_absolute_url }}">{{ division.name }}</a></h2><p>{{ division.season.league.name }} · {{ division.season.name }}</p><p class="muted">{{ division.member_count }} players</p></article>
+{% empty %}<div class="empty wide">No public division yet.</div>{% endfor %}
+</div>
+{% endblock %}

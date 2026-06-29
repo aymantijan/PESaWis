@@ -1,0 +1,38 @@
+{% extends 'core/base.html' %}
+{% block title %}Dashboard - PESOS{% endblock %}
+{% block content %}
+<section class="page-head"><h1>Dashboard</h1><a class="button small" href="{% url 'edit_profile' %}">Edit profile</a></section>
+<section class="stats-grid">
+  <div><strong>{{ user.username }}</strong><span>Username</span></div>
+  <div><strong>{{ profile.full_name|default:'-' }}</strong><span>Full name</span></div>
+  <div><strong>{{ profile.konami_id }}</strong><span>Konami ID</span></div>
+</section>
+<section class="grid two">
+  <div>
+    <h2>Incoming friendly requests</h2>
+    <div class="stack">
+      {% for req in incoming %}
+      <div class="list-card">
+        <span>{{ req.requester.user.username }}{% if req.proposed_at %} · {{ req.proposed_at|date:'M d, Y H:i' }}{% endif %}</span>
+        <span class="inline-actions">
+          <form method="post" action="{% url 'handle_friendly_request' req.pk 'accept' %}">{% csrf_token %}<button class="button small">Accept</button></form>
+          <form method="post" action="{% url 'handle_friendly_request' req.pk 'decline' %}">{% csrf_token %}<button class="button small danger">Decline</button></form>
+        </span>
+      </div>
+      {% empty %}<div class="empty">No pending requests.</div>{% endfor %}
+    </div>
+  </div>
+  <div>
+    <h2>Sent friendly requests</h2>
+    <div class="stack">
+      {% for req in outgoing %}
+      <div class="list-card">
+        <span>{{ req.opponent.user.username }} · {{ req.get_status_display }}</span>
+        {% if req.status == 'pending' %}<form method="post" action="{% url 'handle_friendly_request' req.pk 'cancel' %}">{% csrf_token %}<button class="button small ghost">Cancel</button></form>{% endif %}
+      </div>
+      {% empty %}<div class="empty">No sent requests.</div>{% endfor %}
+    </div>
+  </div>
+</section>
+<section><h2>Recent matches</h2>{% include 'core/partials/match_table.html' with matches=matches %}</section>
+{% endblock %}

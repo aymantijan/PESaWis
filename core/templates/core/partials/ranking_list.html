@@ -1,0 +1,3 @@
+<ol class="ranking-list">
+{% for row in rows %}<li><a href="{{ row.player.get_absolute_url }}">{{ row.player.user.username }}</a><span>{% if metric == 'points' %}{{ row.points }} pts{% elif metric == 'goals_for' %}{{ row.goals_for }} goals{% else %}{{ row.goals_against }} GA{% endif %}</span></li>{% empty %}<li class="empty-inline">No results yet.</li>{% endfor %}
+</ol>
