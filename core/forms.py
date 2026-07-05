@@ -15,6 +15,7 @@ from .models import (
     PlayerProfile,
     Season,
     Tournament,
+    TournamentInvite,
     TournamentMatch,
     TournamentParticipant,
 )
@@ -165,22 +166,48 @@ class MatchForm(forms.ModelForm):
 
 
 class NewsPostForm(forms.ModelForm):
+    tagged_users = forms.ModelMultipleChoiceField(
+        queryset=User.objects.filter(player_profile__isnull=False).order_by('username'),
+        required=False,
+        label='Tag players',
+        widget=forms.SelectMultiple(attrs={'class': 'tag-select', 'data-placeholder': 'Tag players in this post'}),
+    )
+
     class Meta:
         model = NewsPost
-        fields = ('content', 'photo')
+        fields = ('content', 'photo', 'tagged_users')
         widgets = {
-            'content': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Share league news, results or announcements...'}),
+            'content': forms.Textarea(attrs={'rows': 3, 'placeholder': "Share league news, results or announcements... use @ to tag a player"}),
             'photo': forms.FileInput(attrs={'accept': '.jpg,.jpeg,.png,.webp'}),
         }
         error_messages = {'content': REQUIRED_ERROR}
 
+    def save(self, commit=True):
+        post = super().save(commit=commit)
+        if commit:
+            post.tagged_users.set(self.cleaned_data.get('tagged_users', []))
+        return post
+
 
 class NewsCommentForm(forms.ModelForm):
+    tagged_users = forms.ModelMultipleChoiceField(
+        queryset=User.objects.filter(player_profile__isnull=False).order_by('username'),
+        required=False,
+        label='Tag players',
+        widget=forms.SelectMultiple(attrs={'class': 'tag-select', 'data-placeholder': 'Tag someone'}),
+    )
+
     class Meta:
         model = NewsComment
-        fields = ('content',)
-        widgets = {'content': forms.TextInput(attrs={'placeholder': 'Write a comment...'})}
+        fields = ('content', 'tagged_users')
+        widgets = {'content': forms.TextInput(attrs={'placeholder': 'Write a comment... use @ to tag a player'})}
         error_messages = {'content': REQUIRED_ERROR}
+
+    def save(self, commit=True):
+        comment = super().save(commit=commit)
+        if commit:
+            comment.tagged_users.set(self.cleaned_data.get('tagged_users', []))
+        return comment
 
 
 class FriendlyMatchRequestForm(forms.ModelForm):
@@ -196,12 +223,14 @@ class FriendlyMatchRequestForm(forms.ModelForm):
 class NotificationPreferenceForm(forms.ModelForm):
     class Meta:
         model = NotificationPreference
-        fields = ('enabled', 'friendly_requests', 'match_updates', 'comments', 'system_updates')
+        fields = ('enabled', 'friendly_requests', 'match_updates', 'comments', 'tags', 'tournament_invites', 'system_updates')
         labels = {
             'enabled': 'Enable notifications',
             'friendly_requests': 'Friendly requests',
             'match_updates': 'Match updates',
             'comments': 'Comments',
+            'tags': 'Tags & mentions',
+            'tournament_invites': 'Tournament invites',
             'system_updates': 'System updates',
         }
 
@@ -226,6 +255,37 @@ class TournamentParticipantForm(forms.ModelForm):
     class Meta:
         model = TournamentParticipant
         fields = ('player',)
+
+
+class PrivateTournamentForm(forms.ModelForm):
+    class Meta:
+        model = Tournament
+        fields = ('name', 'max_participants')
+        error_messages = {
+            'name': REQUIRED_ERROR,
+            'max_participants': REQUIRED_ERROR,
+        }
+
+
+class TournamentInviteForm(forms.Form):
+    username = forms.CharField(max_length=150, label='Player username', error_messages=REQUIRED_ERROR)
+
+    def __init__(self, *args, tournament=None, **kwargs):
+        self.tournament = tournament
+        super().__init__(*args, **kwargs)
+
+    def clean_username(self):
+        username = self.cleaned_data['username'].strip()
+        try:
+            profile = PlayerProfile.objects.select_related('user').get(user__username__iexact=username)
+        except PlayerProfile.DoesNotExist:
+            raise forms.ValidationError('No player with this username was found.')
+        if self.tournament and self.tournament.participants.filter(player=profile).exists():
+            raise forms.ValidationError('This player is already in the tournament.')
+        if self.tournament and self.tournament.invites.filter(invitee=profile, status='pending').exists():
+            raise forms.ValidationError('This player already has a pending invite.')
+        self.cleaned_data['profile'] = profile
+        return username
 
 
 class TournamentMatchScoreForm(forms.ModelForm):

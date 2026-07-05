@@ -1,42 +1,68 @@
 {% extends 'core/base.html' %}
-{% block title %}Feed - PESOS{% endblock %}
+{% block title %}Feed - PESaWis{% endblock %}
 {% block content %}
-<section class="page-head"><h1>Feed</h1></section>
+<section class="page-head"><h1>Feed</h1><p>What's happening across the league right now.</p></section>
+
 {% if user.is_authenticated %}
-<section class="panel">
-  <form method="post" enctype="multipart/form-data" class="form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Post</button></form>
+<section class="composer">
+  <form method="post" enctype="multipart/form-data" class="form composer-form">
+    {% csrf_token %}
+    <div class="composer-row">
+      <span class="avatar">{{ user.username|slice:':2'|upper }}</span>
+      {{ form.content }}
+    </div>
+    <div class="composer-meta">
+      <label class="composer-photo">📷 Photo{{ form.photo }}</label>
+      <div class="composer-tags">
+        <span>🏷️ Tag players</span>
+        {{ form.tagged_users }}
+      </div>
+    </div>
+    <div class="composer-actions"><button class="button" type="submit">Share post</button></div>
+  </form>
 </section>
 {% else %}
 <div class="empty">Login to post, react or comment.</div>
 {% endif %}
+
 <section class="feed">
 {% for post in posts %}
   <article class="feed-post">
     <div class="post-head">
-      <strong>{{ post.author.username }}</strong>
-      <span>{{ post.created_at|date:'M d, Y H:i' }}</span>
+      <span class="avatar ring">{{ post.author.username|slice:':2'|upper }}</span>
+      <div class="post-head-meta">
+        <strong>{{ post.author.username }}</strong>
+        <span class="muted">{{ post.created_at|date:'M d, Y H:i' }}</span>
+      </div>
       {% if user == post.author %}
-      <span class="inline-actions">
+      <span class="inline-actions post-head-actions">
         <a href="{% url 'edit_post' post.pk %}">Edit</a>
         <form method="post" action="{% url 'delete_post' post.pk %}" onsubmit="return confirm('Are you sure you want to delete this post?');">{% csrf_token %}<button class="link-button danger-text" type="submit">Delete</button></form>
       </span>
       {% endif %}
     </div>
-    <p>{{ post.content|linebreaksbr }}</p>
+    <p class="post-content">{{ post.content|linebreaksbr }}</p>
+    {% if post.tagged_users.all %}
+    <div class="tag-chips">
+      {% for tagged in post.tagged_users.all %}<a class="tag-chip" href="{% url 'player_detail' tagged.username %}">@{{ tagged.username }}</a>{% endfor %}
+    </div>
+    {% endif %}
     {% if post.photo %}<img class="post-photo" src="{{ post.photo.url }}" alt="Post photo">{% endif %}
     <div class="post-actions">
-      <span>{{ post.like_count }} likes</span>
-      <span>{{ post.dislike_count }} dislikes</span>
-      <span>{{ post.comments.count }} comments</span>
       {% if user.is_authenticated %}
-      <form method="post" action="{% url 'react_post' post.pk 'like' %}">{% csrf_token %}<button class="link-button" type="submit">Like</button></form>
-      <form method="post" action="{% url 'react_post' post.pk 'dislike' %}">{% csrf_token %}<button class="link-button" type="submit">Dislike</button></form>
+      <form method="post" action="{% url 'react_post' post.pk 'like' %}" data-like-form>{% csrf_token %}<button class="link-button reaction-btn" type="submit"><span data-like-icon>❤️</span> {{ post.like_count }}</button></form>
+      <form method="post" action="{% url 'react_post' post.pk 'dislike' %}">{% csrf_token %}<button class="link-button reaction-btn" type="submit">👎 {{ post.dislike_count }}</button></form>
+      {% else %}
+      <span>❤️ {{ post.like_count }}</span><span>👎 {{ post.dislike_count }}</span>
       {% endif %}
+      <span>💬 {{ post.comments.count }} comments</span>
     </div>
     <div class="comments">
       {% for comment in post.comments.all %}
       <div class="comment-row">
-        <p><strong>{{ comment.author.username }}</strong> {{ comment.content }}</p>
+        <p><strong>{{ comment.author.username }}</strong> {{ comment.content }}
+          {% for tagged in comment.tagged_users.all %}<a class="tag-chip small" href="{% url 'player_detail' tagged.username %}">@{{ tagged.username }}</a>{% endfor %}
+        </p>
         {% if user == comment.author %}
         <span class="inline-actions">
           <a href="{% url 'edit_comment' comment.pk %}">Edit</a>
@@ -46,8 +72,14 @@
       </div>
       {% empty %}<p class="muted">No comments yet.</p>{% endfor %}
     </div>
-    {% if user.is_authenticated %}<form method="post" action="{% url 'add_comment' post.pk %}" class="comment-form">{% csrf_token %}{{ comment_form.content }}<button class="button small">Comment</button></form>{% endif %}
+    {% if user.is_authenticated %}
+    <form method="post" action="{% url 'add_comment' post.pk %}" class="comment-form comment-form-tag">
+      {% csrf_token %}
+      {{ comment_form.content }}
+      <button class="button small">Comment</button>
+    </form>
+    {% endif %}
   </article>
-{% empty %}<div class="empty">No posts yet.</div>{% endfor %}
+{% empty %}<div class="empty">No posts yet. Be the first to share something!</div>{% endfor %}
 </section>
 {% endblock %}

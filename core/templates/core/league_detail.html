@@ -1,10 +1,19 @@
 {% extends 'core/base.html' %}
 {% block title %}{{ league.name }} · PESOS{% endblock %}
 {% block content %}
-<section class="page-head"><div><h1>{{ league.name }}</h1><p>{{ league.description|default:'League page.' }}</p></div><div>{% if user.is_authenticated %}{% if join_state == 'member' %}<span class="badge success">You are a member</span>{% elif join_state == 'pending' %}<span class="badge warning">Request pending</span>{% else %}<a class="button" href="{% url 'request_to_join_league' league.slug %}">Request to play</a>{% endif %}{% else %}<a class="button" href="{% url 'login' %}">Login to request to play</a>{% endif %}</div></section>
-<section class="grid two">
-  <article class="card"><h2>Seasons</h2>{% for season in seasons %}<div class="list-row"><strong>{{ season.name }}</strong><span>{{ season.get_status_display }}</span></div>{% empty %}<div class="empty">No season yet.</div>{% endfor %}</article>
-  <article class="card"><h2>Divisions</h2>{% for division in divisions %}<div class="list-row"><a href="{{ division.get_absolute_url }}">{{ division.name }}</a><span>{{ division.season.name }}</span></div>{% empty %}<div class="empty">No division yet.</div>{% endfor %}</article>
+<section class="page-head">
+  <div><h1>🏆 {{ league.name }}</h1><p>{{ league.description|default:'League page.' }}</p></div>
+  <div>
+    {% if user.is_authenticated %}
+      {% if join_state == 'member' %}<span class="badge badge-public">✓ You are a member</span>
+      {% elif join_state == 'pending' %}<span class="badge badge-private">⏳ Request pending</span>
+      {% else %}<a class="button" href="{% url 'request_to_join_league' league.slug %}">Request to play</a>{% endif %}
+    {% else %}<a class="button" href="{% url 'login' %}">Login to request to play</a>{% endif %}
+  </div>
 </section>
-<section><h2>Latest matches</h2>{% if matches %}{% include 'core/partials/match_table.html' with matches=matches %}{% else %}<div class="empty">Calendar has not been generated yet.</div>{% endif %}</section>
+<section class="grid two">
+  <article class="card"><h2>📅 Seasons</h2>{% for season in seasons %}<div class="list-row"><strong>{{ season.name }}</strong><span class="badge">{{ season.get_status_display }}</span></div>{% empty %}<div class="empty">No season yet.</div>{% endfor %}</article>
+  <article class="card"><h2>🏟️ Divisions</h2>{% for division in divisions %}<div class="list-row"><a href="{{ division.get_absolute_url }}">{{ division.name }}</a><span class="muted">{{ division.season.name }}</span></div>{% empty %}<div class="empty">No division yet.</div>{% endfor %}</article>
+</section>
+<section><h2>⚽ Latest matches</h2>{% if matches %}{% include 'core/partials/match_table.html' with matches=matches %}{% else %}<div class="empty">Calendar has not been generated yet.</div>{% endif %}</section>
 {% endblock %}

@@ -1,15 +1,15 @@
 {% extends 'core/base.html' %}
 {% block title %}Players - PESOS{% endblock %}
 {% block content %}
-<section class="page-head"><h1>Players</h1><p>Player directory and Konami IDs.</p></section>
-<form class="toolbar"><input name="q" value="{{ q }}" placeholder="Search players"><button class="button small">Search</button></form>
-<div class="grid three">
+<section class="page-head"><h1>Players</h1><p>Discover players across the league.</p></section>
+<form class="toolbar"><input name="q" value="{{ q }}" placeholder="🔍 Search players"><button class="button small">Search</button></form>
+<div class="explore-grid">
 {% for player in players %}
-  <a class="card player-card" href="{{ player.get_absolute_url }}">
-    {% if player.profile_photo %}<img class="avatar" src="{{ player.profile_photo.url }}" alt="{{ player.user.username }} profile photo">{% else %}<span class="avatar">{{ player.initials }}</span>{% endif %}
+  <a class="explore-card" href="{{ player.get_absolute_url }}">
+    {% if player.profile_photo %}<img class="avatar ring" src="{{ player.profile_photo.url }}" alt="{{ player.user.username }} profile photo">{% else %}<span class="avatar ring">{{ player.initials }}</span>{% endif %}
     <h2>{{ player.user.username }}</h2>
-    <p>Konami ID: {{ player.konami_id }}</p>
-    <p class="muted">{{ player.city|default:'No city' }}</p>
+    <p class="muted">{{ player.konami_id }}</p>
+    <p class="muted">📍 {{ player.city|default:'No city' }}</p>
   </a>
 {% empty %}<div class="empty wide">No public player yet.</div>{% endfor %}
 </div>

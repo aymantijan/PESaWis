@@ -1,7 +1,7 @@
 {% extends 'core/base.html' %}
 {% block title %}Rules - PESOS{% endblock %}
 {% block content %}
-<section class="page-head"><h1>Rules</h1></section>
+<section class="page-head"><div><h1>📜 Rules</h1><p>Fair play, scoring and promotion/relegation — in your language.</p></div></section>
 
 <nav class="language-switch" aria-label="Rules language">
   <a class="{% if active_lang == 'en' %}active{% endif %}" href="{% url 'rules' %}?lang=en">English</a>

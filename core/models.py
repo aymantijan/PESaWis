@@ -273,6 +273,7 @@ class NewsPost(TimeStampedModel):
     content = models.TextField()
     photo = models.FileField(upload_to=feed_photo_path, validators=[validate_feed_photo], blank=True, null=True)
     is_pinned = models.BooleanField(default=False)
+    tagged_users = models.ManyToManyField(User, blank=True, related_name='tagged_in_posts')
 
     class Meta:
         ordering = ['-is_pinned', '-created_at']
@@ -299,6 +300,7 @@ class NewsComment(TimeStampedModel):
     post = models.ForeignKey(NewsPost, on_delete=models.CASCADE, related_name='comments')
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='news_comments')
     content = models.TextField()
+    tagged_users = models.ManyToManyField(User, blank=True, related_name='tagged_in_comments')
 
     class Meta:
         ordering = ['created_at']
@@ -339,6 +341,8 @@ class NotificationPreference(TimeStampedModel):
     friendly_requests = models.BooleanField(default=True)
     match_updates = models.BooleanField(default=True)
     comments = models.BooleanField(default=True)
+    tags = models.BooleanField(default=True)
+    tournament_invites = models.BooleanField(default=True)
     system_updates = models.BooleanField(default=True)
 
     class Meta:
@@ -353,6 +357,8 @@ class Notification(TimeStampedModel):
         ('friendly_request', 'Friendly request'),
         ('match_update', 'Match update'),
         ('comment', 'Comment'),
+        ('tag', 'Tag'),
+        ('tournament_invite', 'Tournament invite'),
         ('system', 'System'),
     ]
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
@@ -369,6 +375,19 @@ class Notification(TimeStampedModel):
         return f'{self.title} -> {self.user.username}'
 
 
+class PushSubscription(TimeStampedModel):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='push_subscriptions')
+    endpoint = models.URLField(max_length=500, unique=True)
+    p256dh = models.CharField(max_length=200)
+    auth = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Push subscription for {self.user.username}'
+
+
 class Tournament(TimeStampedModel):
     STATUS_CHOICES = [
         ('draft', 'Draft'),
@@ -377,9 +396,15 @@ class Tournament(TimeStampedModel):
         ('knockout', 'Knockout'),
         ('completed', 'Completed'),
     ]
+    VISIBILITY_CHOICES = [
+        ('public', 'Public'),
+        ('private', 'Private'),
+    ]
     name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=180, unique=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    visibility = models.CharField(max_length=10, choices=VISIBILITY_CHOICES, default='public')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_tournaments')
     champion = models.ForeignKey(PlayerProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='tournament_wins')
     max_participants = models.PositiveIntegerField(default=32)
     groups_generated = models.BooleanField(default=False)
@@ -405,6 +430,40 @@ class Tournament(TimeStampedModel):
 
     def get_absolute_url(self):
         return reverse('tournament_detail', kwargs={'slug': self.slug})
+
+    def is_visible_to(self, user):
+        if self.visibility == 'public':
+            return True
+        if not user.is_authenticated:
+            return False
+        if user.is_staff or user.is_superuser or self.created_by_id == user.id:
+            return True
+        profile = getattr(user, 'player_profile', None)
+        if profile is None:
+            return False
+        if self.participants.filter(player=profile).exists():
+            return True
+        return self.invites.filter(invitee=profile, status='pending').exists()
+
+    def can_manage(self, user):
+        if not user.is_authenticated:
+            return False
+        return user.is_staff or user.is_superuser or self.created_by_id == user.id
+
+
+class TournamentInvite(TimeStampedModel):
+    STATUS_CHOICES = [('pending', 'Pending'), ('accepted', 'Accepted'), ('declined', 'Declined')]
+    tournament = models.ForeignKey(Tournament, on_delete=models.CASCADE, related_name='invites')
+    invited_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_tournament_invites')
+    invitee = models.ForeignKey(PlayerProfile, on_delete=models.CASCADE, related_name='tournament_invites')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+
+    class Meta:
+        unique_together = [('tournament', 'invitee')]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.invitee} invited to {self.tournament} ({self.status})'
 
 
 class TournamentParticipant(TimeStampedModel):

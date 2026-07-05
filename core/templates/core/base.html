@@ -4,75 +4,102 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{% block description %}PESaWis — manage PES leagues, divisions, tournaments, standings and players in one place.{% endblock %}">
+  <meta name="theme-color" content="#0a0d12">
   <title>{% block title %}PESOS League{% endblock %}</title>
-  <link rel="icon" href="{% static 'images/pesawis-logo.png' %}">
+  <link rel="icon" type="image/svg+xml" href="{% static 'images/pesawis-crest.svg' %}">
+  <link rel="apple-touch-icon" href="{% static 'images/pesawis-icon.png' %}">
+  <link rel="manifest" href="{% static 'core/manifest.json' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'core/css/site.css' %}">
 </head>
-<body>
+<body{% if user.is_authenticated %} data-vapid-key="{{ vapid_public_key }}" data-subscribe-url="{% url 'push_subscribe' %}" data-unsubscribe-url="{% url 'push_unsubscribe' %}"{% endif %}>
 <header class="topbar">
-  <a class="brand" href="{% url 'home' %}">
-    <img src="{% static 'images/pesawis-logo.png' %}" alt="PESaWis logo" class="site-logo">
-    <span>PESaWis</span>
-  </a>
-  <button class="nav-toggle" data-nav-toggle aria-label="Open navigation">Menu</button>
-  <nav class="nav" data-nav>
-    <a href="{% url 'home' %}">Home</a>
-    <div class="nav-group">
-      <button type="button">League</button>
-      <div class="dropdown">
-        <a href="{% url 'division_list' %}">Divisions</a>
-        <a href="{% url 'calendar' %}">Calendar</a>
-        <a href="{% url 'standings' %}">Standings</a>
-        <a href="{% url 'rankings' %}">Best Players</a>
-        <a href="{% url 'rankings' %}">Top Scorers</a>
-        <a href="{% url 'rankings' %}">Best Defenders</a>
+  <div class="topbar-main">
+    <a class="brand" href="{% url 'home' %}">
+      <span class="brand-badge"><img src="{% static 'images/pesawis-crest.svg' %}" alt="PESaWis crest" class="site-logo"></span>
+      <span class="brand-text">
+        <span class="brand-name">PESa<span>WIS</span></span>
+        <span class="brand-tag">League &middot; Matchday HQ</span>
+      </span>
+    </a>
+    <button class="nav-toggle" data-nav-toggle aria-label="Open navigation">Menu</button>
+    <nav class="nav" data-nav>
+      <a href="{% url 'home' %}">Home</a>
+      <div class="nav-group">
+        <button type="button">League</button>
+        <div class="dropdown">
+          <a href="{% url 'division_list' %}">Divisions</a>
+          <a href="{% url 'calendar' %}">Calendar</a>
+          <a href="{% url 'standings' %}">Standings</a>
+          <a href="{% url 'rankings' %}">Best Players</a>
+          <a href="{% url 'rankings' %}">Top Scorers</a>
+          <a href="{% url 'rankings' %}">Best Defenders</a>
+        </div>
       </div>
-    </div>
-    <div class="nav-group">
-      <button type="button">Tournaments</button>
-      <div class="dropdown">
-        <a href="{% url 'tournament_list' %}">All Tournaments</a>
-        <a href="{% url 'tournament_list' %}">Groups</a>
-        <a href="{% url 'tournament_list' %}">Knockout</a>
+      <div class="nav-group">
+        <button type="button">Tournaments</button>
+        <div class="dropdown">
+          <a href="{% url 'tournament_list' %}">All Tournaments</a>
+          <a href="{% url 'tournament_list' %}">Groups</a>
+          <a href="{% url 'tournament_list' %}">Knockout</a>
+        </div>
       </div>
-    </div>
-    <div class="nav-group">
-      <button type="button">Players</button>
-      <div class="dropdown">
-        <a href="{% url 'player_list' %}">Player List</a>
-        {% if user.is_authenticated %}<a href="{% url 'dashboard' %}">Friendly Requests</a>{% endif %}
+      <div class="nav-group">
+        <button type="button">Players</button>
+        <div class="dropdown">
+          <a href="{% url 'player_list' %}">Player List</a>
+          {% if user.is_authenticated %}<a href="{% url 'dashboard' %}">Friendly Requests</a>{% endif %}
+        </div>
       </div>
-    </div>
-    <a href="{% url 'news_feed' %}">Feed</a>
-    <a href="{% url 'rules' %}">Rules</a>
-    {% if user.is_authenticated %}
-      <a href="{% url 'notifications' %}">Notifications{% if unread_notification_count %} <span class="nav-badge">{{ unread_notification_count }}</span>{% endif %}</a>
-    {% endif %}
-    <div class="nav-group">
-      <button type="button">Account</button>
-      <div class="dropdown">
-        {% if user.is_authenticated %}
-          <a href="{% url 'dashboard' %}">Profile</a>
-          <form action="{% url 'logout' %}" method="post" class="dropdown-form">{% csrf_token %}<button type="submit">Logout</button></form>
-        {% else %}
-          <a href="{% url 'login' %}">Login</a>
-          <a href="{% url 'signup' %}">Sign up</a>
-        {% endif %}
+      <a href="{% url 'news_feed' %}">Feed</a>
+      <a href="{% url 'rules' %}">Rules</a>
+      {% if user.is_authenticated %}
+        <a href="{% url 'notifications' %}" class="bell-link">🔔 Notifications{% if unread_notification_count %} <span class="nav-badge">{{ unread_notification_count }}</span>{% endif %}</a>
+        <button type="button" class="link-button" data-push-toggle title="Get PESaWis alerts on this device">📲 Alerts</button>
+      {% endif %}
+      <div class="nav-group">
+        <button type="button">Account</button>
+        <div class="dropdown">
+          {% if user.is_authenticated %}
+            <a href="{% url 'dashboard' %}">Profile</a>
+            <form action="{% url 'logout' %}" method="post" class="dropdown-form">{% csrf_token %}<button type="submit">Logout</button></form>
+          {% else %}
+            <a href="{% url 'login' %}">Login</a>
+            <a href="{% url 'signup' %}">Sign up</a>
+          {% endif %}
+        </div>
       </div>
-    </div>
-    {% if user.is_staff %}
-    <div class="nav-group">
-      <button type="button">Admin/Staff</button>
-      <div class="dropdown">
-        <a href="{% url 'staff_dashboard' %}">Staff/Admin Dashboard</a>
-        <a href="{% url 'create_calendar' %}">Create Calendar</a>
-        <a href="{% url 'calendar' %}">Manage Scores</a>
-        <a href="{% url 'tournament_list' %}">Manage Tournaments</a>
-        <a href="/admin/">Django Admin</a>
+      {% if user.is_staff %}
+      <div class="nav-group">
+        <button type="button">Admin/Staff</button>
+        <div class="dropdown">
+          <a href="{% url 'staff_dashboard' %}">Staff/Admin Dashboard</a>
+          <a href="{% url 'create_calendar' %}">Create Calendar</a>
+          <a href="{% url 'calendar' %}">Manage Scores</a>
+          <a href="{% url 'tournament_list' %}">Manage Tournaments</a>
+          <a href="/admin/">Django Admin</a>
+        </div>
       </div>
+      {% endif %}
+    </nav>
+    {% if not user.is_authenticated %}<a class="login-link" href="{% url 'login' %}">Login</a>{% endif %}
+  </div>
+
+  {% if ticker_matches %}
+  <div class="ticker">
+    <div class="ticker-track">
+      {% for m in ticker_matches %}
+        <span class="ticker-item"><span class="ticker-dot"></span>{{ m.home_player.user.username }} <strong>{{ m.home_score }}-{{ m.away_score }}</strong> {{ m.away_player.user.username }}</span>
+      {% endfor %}
+      {% for m in ticker_matches %}
+        <span class="ticker-item" aria-hidden="true"><span class="ticker-dot"></span>{{ m.home_player.user.username }} <strong>{{ m.home_score }}-{{ m.away_score }}</strong> {{ m.away_player.user.username }}</span>
+      {% endfor %}
     </div>
-    {% endif %}
-  </nav>
+  </div>
+  {% endif %}
 </header>
 
 <main class="page">
@@ -84,7 +111,23 @@
   {% block content %}{% endblock %}
 </main>
 
-<footer class="footer">PESOS League Manager</footer>
+<footer class="footer">
+  <div class="footer-stripe"></div>
+  <div class="footer-text"><strong>PESaWis</strong> &middot; PES League Manager &middot; built for players, by players</div>
+</footer>
+
+<nav class="bottom-nav" aria-label="Quick navigation">
+  <a href="{% url 'home' %}"><span class="icon">🏠</span>Home</a>
+  <a href="{% url 'player_list' %}"><span class="icon">🔍</span>Players</a>
+  <a href="{% url 'news_feed' %}"><span class="icon">➕</span>Feed</a>
+  <a href="{% url 'tournament_list' %}"><span class="icon">🏆</span>Cups</a>
+  {% if user.is_authenticated %}
+  <a href="{% url 'dashboard' %}"><span class="icon">👤</span>Profile{% if unread_notification_count %}<span class="bottom-nav-badge">{{ unread_notification_count }}</span>{% endif %}</a>
+  {% else %}
+  <a href="{% url 'login' %}"><span class="icon">👤</span>Login</a>
+  {% endif %}
+</nav>
+
 <script src="{% static 'core/js/app.js' %}"></script>
 </body>
 </html>

@@ -1,23 +1,23 @@
 {% extends 'core/base.html' %}
 {% block title %}Staff/Admin Dashboard - PESOS{% endblock %}
 {% block content %}
-<section class="page-head"><h1>Staff/Admin Dashboard</h1></section>
+<section class="page-head"><div><h1>Staff/Admin Dashboard</h1><p>Manage leagues, calendars, tournaments and moderation from one place.</p></div></section>
 
 <section class="quick-actions">
-  <a class="button small" href="{% url 'create_season' %}">Create Season</a>
-  <a class="button small" href="{% url 'create_division' %}">Create Division</a>
-  <a class="button small" href="{% url 'create_division_membership' %}">Add Player to Division</a>
-  <a class="button small" href="{% url 'create_calendar' %}">Create Calendar</a>
-  <a class="button small" href="{% url 'calendar' %}">Enter Scores</a>
-  <a class="button small" href="{% url 'create_tournament' %}">Create Tournament</a>
-  <a class="button small" href="{% url 'news_feed' %}">Manage Feed</a>
+  <a class="button small" href="{% url 'create_season' %}">📅 Create Season</a>
+  <a class="button small" href="{% url 'create_division' %}">🏟️ Create Division</a>
+  <a class="button small" href="{% url 'create_division_membership' %}">👥 Add Player to Division</a>
+  <a class="button small" href="{% url 'create_calendar' %}">🗓️ Create Calendar</a>
+  <a class="button small" href="{% url 'calendar' %}">✍️ Enter Scores</a>
+  <a class="button small" href="{% url 'create_tournament' %}">🏆 Create Tournament</a>
+  <a class="button small" href="{% url 'news_feed' %}">📰 Manage Feed</a>
 </section>
 
 <section class="stats-grid">
-  <div><strong>{{ league_count }}</strong><span>Leagues</span></div>
-  <div><strong>{{ player_count }}</strong><span>Players</span></div>
-  <div><strong>{{ match_count }}</strong><span>Matches</span></div>
-  <div><strong>{{ tournament_count }}</strong><span>Tournaments</span></div>
+  <div><strong>{{ league_count }}</strong><span>🏆 Leagues</span></div>
+  <div><strong>{{ player_count }}</strong><span>👥 Players</span></div>
+  <div><strong>{{ match_count }}</strong><span>⚽ Matches</span></div>
+  <div><strong>{{ tournament_count }}</strong><span>🏅 Tournaments</span></div>
 </section>
 
 <section class="grid two">

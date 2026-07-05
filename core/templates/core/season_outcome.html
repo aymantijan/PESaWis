@@ -1,4 +1,5 @@
 {% extends 'core/base.html' %}
+{% load core_extras %}
 {% block title %}Season outcome - PESOS{% endblock %}
 {% block content %}
 <section class="page-head">
@@ -12,7 +13,7 @@
     <thead><tr><th>Division</th><th>Rank</th><th>Player</th><th>Points</th><th>GD</th><th>Outcome</th><th>Target</th></tr></thead>
     <tbody>
       {% for row in rows %}
-      <tr><td>{{ row.division.name }}</td><td>{{ row.rank }}</td><td>{{ row.player.user.username }}</td><td>{{ row.stats.points }}</td><td>{{ row.stats.goal_diff }}</td><td>{{ row.outcome }}</td><td>{% if row.target %}{{ row.target.name }}{% else %}-{% endif %}</td></tr>
+      <tr><td>{{ row.division.name }}</td><td>{{ row.rank }}</td><td>{{ row.player.user.username }}</td><td>{{ row.stats.points }}</td><td>{{ row.stats.goal_diff }}</td><td><span class="outcome-pill {{ row.outcome|outcome_class }}">{{ row.outcome }}</span></td><td>{% if row.target %}{{ row.target.name }}{% else %}-{% endif %}</td></tr>
       {% empty %}<tr><td colspan="7">No standings yet.</td></tr>{% endfor %}
     </tbody>
   </table>

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="crestBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#0a0d12"/>
+    </linearGradient>
+    <linearGradient id="ribbonGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#cf9a02"/>
+      <stop offset="50%" stop-color="#f2b705"/>
+      <stop offset="100%" stop-color="#cf9a02"/>
+    </linearGradient>
+  </defs>
+
+  <!-- outer hex shield -->
+  <polygon points="100,4 194,50 194,150 100,196 6,150 6,50" fill="url(#crestBg)" stroke="#f2b705" stroke-width="5"/>
+  <!-- inner hex badge ring -->
+  <polygon points="100,13.6 184.6,55 184.6,145 100,186.4 15.4,145 15.4,55" fill="none" stroke="#f2b705" stroke-width="1.4" opacity=".55"/>
+
+  <!-- diagonal accent stripes (echoes the site's angular cut-corner motif) -->
+  <g stroke="#f2b705" stroke-width="2" opacity=".18">
+    <line x1="24" y1="70" x2="60" y2="34"/>
+    <line x1="24" y1="88" x2="78" y2="34"/>
+    <line x1="176" y1="70" x2="140" y2="34"/>
+    <line x1="176" y1="88" x2="122" y2="34"/>
+  </g>
+
+  <!-- football -->
+  <circle cx="100" cy="90" r="31" fill="#f4f6f8" stroke="#0a0d12" stroke-width="2.5"/>
+  <g stroke="#0a0d12" stroke-width="2.5" stroke-linejoin="round">
+    <line x1="100" y1="64" x2="100" y2="81"/>
+    <line x1="128.5" y1="84.7" x2="112.4" y2="90"/>
+    <line x1="117.6" y1="118.3" x2="107.6" y2="104.5"/>
+    <line x1="82.4" y1="118.3" x2="92.4" y2="104.5"/>
+    <line x1="71.5" y1="84.7" x2="87.6" y2="90"/>
+  </g>
+  <polygon points="100,81 112.4,90 107.6,104.5 92.4,104.5 87.6,90" fill="#0a0d12"/>
+
+  <!-- ribbon monogram -->
+  <polygon points="52,140 148,140 160,151 160,172 40,172 40,151" fill="url(#ribbonGrad)" stroke="#0a0d12" stroke-width="1.5"/>
+  <text x="100" y="164" text-anchor="middle" font-family="'Titillium Web','Arial Black',Arial,sans-serif" font-weight="900" font-size="26" letter-spacing="1" fill="#0a0d12">PW</text>
+</svg>

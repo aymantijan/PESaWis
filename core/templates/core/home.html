@@ -4,7 +4,7 @@
 {% block content %}
 <section class="hero compact">
   <div>
-    <img src="{% static 'images/pesawis-logo.png' %}" alt="PESaWis logo" class="home-logo">
+    <img src="{% static 'images/pesawis-crest.svg' %}" alt="PESaWis crest" class="home-logo">
     <p class="eyebrow">League management</p>
     <h1>Run your PES league without complexity.</h1>
     <p>Create divisions, schedule matches, record scores and keep players connected.</p>
@@ -16,9 +16,9 @@
 </section>
 
 <section class="grid three">
-  <article class="card"><h3>Public leagues</h3><p class="metric">{{ leagues|length }}</p><p>Visible competitions open to players.</p></article>
-  <article class="card"><h3>Upcoming matches</h3><p class="metric">{{ upcoming|length }}</p><p>Scheduled official and friendly games.</p></article>
-  <article class="card"><h3>Top scorers</h3><p class="metric">{{ scorers|length }}</p><p>Based on recorded official results.</p></article>
+  <article class="card"><h3>🏆 Public leagues</h3><p class="metric">{{ leagues|length }}</p><p>Visible competitions open to players.</p></article>
+  <article class="card"><h3>📅 Upcoming matches</h3><p class="metric">{{ upcoming|length }}</p><p>Scheduled official and friendly games.</p></article>
+  <article class="card"><h3>⚽ Top scorers</h3><p class="metric">{{ scorers|length }}</p><p>Based on recorded official results.</p></article>
 </section>
 
 <section class="split">

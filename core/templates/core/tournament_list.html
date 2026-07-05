@@ -1,12 +1,39 @@
 {% extends 'core/base.html' %}
-{% block title %}Tournaments - PESOS{% endblock %}
+{% block title %}Tournaments - PESaWis{% endblock %}
 {% block content %}
-<section class="page-head"><h1>Tournaments</h1>{% if user.is_staff %}<a class="button small" href="{% url 'create_tournament' %}">Create tournament</a>{% endif %}</section>
+<section class="page-head">
+  <div><h1>Tournaments</h1><p>Official PESaWis tournaments plus private cups created by players.</p></div>
+  <span class="inline-actions">
+    {% if user.is_staff %}<a class="button small" href="{% url 'create_tournament' %}">Create official tournament</a>{% endif %}
+    {% if user.is_authenticated %}<a class="button small ghost" href="{% url 'create_private_tournament' %}">Create private tournament</a>{% endif %}
+  </span>
+</section>
+
+{% if my_invites %}
+<section class="panel invite-panel">
+  <h2>Your tournament invites</h2>
+  <div class="stack">
+    {% for invite in my_invites %}
+    <div class="list-card">
+      <span><strong>{{ invite.tournament.name }}</strong> — invited by {{ invite.invited_by.username }}</span>
+      <span class="inline-actions">
+        <form method="post" action="{% url 'respond_tournament_invite' invite.pk 'accept' %}">{% csrf_token %}<button class="button small">Accept</button></form>
+        <form method="post" action="{% url 'respond_tournament_invite' invite.pk 'decline' %}">{% csrf_token %}<button class="button small ghost">Decline</button></form>
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <div class="stack">
 {% for tournament in tournaments %}
-  <a class="list-card" href="{{ tournament.get_absolute_url }}"><strong>{{ tournament.name }}</strong><span>{{ tournament.get_status_display }}{% if tournament.champion %} - Champion: {{ tournament.champion.user.username }}{% endif %}</span></a>
+  <a class="list-card" href="{{ tournament.get_absolute_url }}">
+    <span><strong>{{ tournament.name }}</strong> <span class="badge {% if tournament.visibility == 'private' %}badge-private{% else %}badge-public{% endif %}">{{ tournament.get_visibility_display }}</span></span>
+    <span>{{ tournament.get_status_display }}{% if tournament.champion %} · Champion: {{ tournament.champion.user.username }}{% endif %}</span>
+  </a>
 {% empty %}
-  <div class="empty">No tournaments yet.</div>
+  <div class="empty">No tournaments yet. Start your own private cup with friends!</div>
 {% endfor %}
 </div>
 {% endblock %}

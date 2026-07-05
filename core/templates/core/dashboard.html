@@ -1,7 +1,7 @@
 {% extends 'core/base.html' %}
 {% block title %}Dashboard - PESOS{% endblock %}
 {% block content %}
-<section class="page-head"><h1>Dashboard</h1><a class="button small" href="{% url 'edit_profile' %}">Edit profile</a></section>
+<section class="page-head"><div><h1>👋 Welcome back, {{ user.username }}</h1><p>Your matches, requests and invites at a glance.</p></div><a class="button small" href="{% url 'edit_profile' %}">Edit profile</a></section>
 <section class="stats-grid">
   <div><strong>{{ user.username }}</strong><span>Username</span></div>
   <div><strong>{{ profile.full_name|default:'-' }}</strong><span>Full name</span></div>
@@ -34,5 +34,21 @@
     </div>
   </div>
 </section>
+{% if tournament_invites %}
+<section>
+  <h2>Tournament invites</h2>
+  <div class="stack">
+    {% for invite in tournament_invites %}
+    <div class="list-card">
+      <span><strong>{{ invite.tournament.name }}</strong> — invited by {{ invite.invited_by.username }}</span>
+      <span class="inline-actions">
+        <form method="post" action="{% url 'respond_tournament_invite' invite.pk 'accept' %}">{% csrf_token %}<button class="button small">Accept</button></form>
+        <form method="post" action="{% url 'respond_tournament_invite' invite.pk 'decline' %}">{% csrf_token %}<button class="button small ghost">Decline</button></form>
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 <section><h2>Recent matches</h2>{% include 'core/partials/match_table.html' with matches=matches %}</section>
 {% endblock %}

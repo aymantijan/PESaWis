@@ -1,3 +1,4 @@
+import json
 from itertools import combinations
 from functools import wraps
 
@@ -5,8 +6,11 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, Q
+from django.contrib.staticfiles import finders
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -22,9 +26,11 @@ from .forms import (
     NewsPostForm,
     NotificationPreferenceForm,
     PlayerProfileForm,
+    PrivateTournamentForm,
     SeasonForm,
     SignupForm,
     TournamentForm,
+    TournamentInviteForm,
     TournamentMatchScoreForm,
     TournamentParticipantForm,
 )
@@ -42,13 +48,16 @@ from .models import (
     Notification,
     NotificationPreference,
     PlayerProfile,
+    PushSubscription,
     Season,
     Tournament,
     TournamentGroup,
     TournamentGroupMembership,
+    TournamentInvite,
     TournamentMatch,
     TournamentParticipant,
 )
+from .push import send_web_push
 from .utils import best_defenders, compute_player_stats, division_standings, season_outcomes, top_scorers, tournament_group_stats
 
 
@@ -62,6 +71,21 @@ def staff_required(view_func):
             messages.error(request, 'You do not have permission to perform this action.')
             return redirect('home')
         return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def tournament_manager_required(view_func):
+    """Allow staff or the tournament's own creator to manage it (used for private, friend-run tournaments)."""
+    @wraps(view_func)
+    def wrapper(request, slug, *args, **kwargs):
+        if not request.user.is_authenticated:
+            messages.error(request, 'You must be logged in to perform this action.')
+            return redirect('login')
+        tournament = get_object_or_404(Tournament, slug=slug)
+        if not tournament.can_manage(request.user):
+            messages.error(request, 'You do not have permission to manage this tournament.')
+            return redirect('tournament_detail', slug=slug)
+        return view_func(request, slug, *args, **kwargs)
     return wrapper
 
 
@@ -83,6 +107,10 @@ def notification_allowed(preference, notification_type):
         return preference.match_updates
     if notification_type == 'comment':
         return preference.comments
+    if notification_type == 'tag':
+        return preference.tags
+    if notification_type == 'tournament_invite':
+        return preference.tournament_invites
     return preference.system_updates
 
 
@@ -90,13 +118,22 @@ def create_notification(user, title, message, notification_type='system', link='
     preference, _ = NotificationPreference.objects.get_or_create(user=user)
     if not notification_allowed(preference, notification_type):
         return None
-    return Notification.objects.create(
+    notification = Notification.objects.create(
         user=user,
         title=title,
         message=message,
         notification_type=notification_type,
         link=link,
     )
+    send_web_push(user, title, message, link)
+    return notification
+
+
+def notify_tagged_users(users, actor, title, link):
+    for tagged_user in users:
+        if tagged_user == actor:
+            continue
+        create_notification(tagged_user, title, f'{actor.username} tagged you.', 'tag', link)
 
 
 def notify_match_scheduled(match):
@@ -109,6 +146,12 @@ def notify_match_scheduled(match):
             'match_update',
             link,
         )
+
+
+def service_worker(request):
+    path = finders.find('core/js/sw.js')
+    with open(path, 'rb') as handle:
+        return HttpResponse(handle.read(), content_type='application/javascript')
 
 
 def public_leagues():
@@ -141,7 +184,8 @@ def dashboard(request):
     incoming = FriendlyMatchRequest.objects.select_related('requester__user').filter(opponent=profile, status='pending')
     outgoing = FriendlyMatchRequest.objects.select_related('opponent__user').filter(requester=profile)[:10]
     joins = LeagueJoinRequest.objects.select_related('league').filter(player=profile)[:10]
-    return render(request, 'core/dashboard.html', {'profile': profile, 'matches': matches, 'incoming': incoming, 'outgoing': outgoing, 'joins': joins})
+    tournament_invites = TournamentInvite.objects.select_related('tournament', 'invited_by').filter(invitee=profile, status='pending')
+    return render(request, 'core/dashboard.html', {'profile': profile, 'matches': matches, 'incoming': incoming, 'outgoing': outgoing, 'joins': joins, 'tournament_invites': tournament_invites})
 
 
 @login_required
@@ -170,6 +214,36 @@ def mark_notification_read(request, pk):
     notification.save(update_fields=['is_read', 'updated_at'])
     messages.success(request, 'Updated successfully.')
     return redirect('notifications')
+
+
+@login_required
+@require_POST
+def push_subscribe(request):
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        endpoint = payload['endpoint']
+        keys = payload['keys']
+        p256dh = keys['p256dh']
+        auth = keys['auth']
+    except (KeyError, ValueError, TypeError):
+        return HttpResponseBadRequest('Invalid subscription payload.')
+    PushSubscription.objects.update_or_create(
+        endpoint=endpoint,
+        defaults={'user': request.user, 'p256dh': p256dh, 'auth': auth},
+    )
+    return JsonResponse({'status': 'subscribed'})
+
+
+@login_required
+@require_POST
+def push_unsubscribe(request):
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        endpoint = payload['endpoint']
+    except (KeyError, ValueError, TypeError):
+        return HttpResponseBadRequest('Invalid payload.')
+    PushSubscription.objects.filter(endpoint=endpoint, user=request.user).delete()
+    return JsonResponse({'status': 'unsubscribed'})
 
 
 @login_required
@@ -374,10 +448,12 @@ def news_feed(request):
             post = form.save(commit=False)
             post.author = request.user
             post.save()
+            form.save_m2m()
+            notify_tagged_users(post.tagged_users.all(), request.user, f'{request.user.username} tagged you in a post', '/feed/')
             messages.success(request, 'Post published successfully.')
             return redirect('news_feed')
         add_form_error_messages(request, form)
-    posts = NewsPost.objects.select_related('author').prefetch_related('comments__author', 'reactions')
+    posts = NewsPost.objects.select_related('author').prefetch_related('comments__author', 'comments__tagged_users', 'reactions', 'tagged_users')
     return render(request, 'core/news_feed.html', {'posts': posts, 'form': form, 'comment_form': NewsCommentForm()})
 
 
@@ -415,7 +491,8 @@ def add_comment(request, pk):
     post = get_object_or_404(NewsPost, pk=pk)
     form = NewsCommentForm(request.POST)
     if form.is_valid():
-        NewsComment.objects.create(post=post, author=request.user, content=form.cleaned_data['content'])
+        comment = NewsComment.objects.create(post=post, author=request.user, content=form.cleaned_data['content'])
+        comment.tagged_users.set(form.cleaned_data.get('tagged_users', []))
         if post.author != request.user:
             create_notification(
                 post.author,
@@ -424,6 +501,7 @@ def add_comment(request, pk):
                 'comment',
                 '/feed/',
             )
+        notify_tagged_users(comment.tagged_users.all(), request.user, f'{request.user.username} tagged you in a comment', '/feed/')
         messages.success(request, 'Comment added successfully.')
     else:
         add_form_error_messages(request, form)
@@ -650,12 +728,21 @@ def apply_promotion_relegation(request, season_id):
 
 
 def tournament_list(request):
-    tournaments = Tournament.objects.all()
-    return render(request, 'core/tournament_list.html', {'tournaments': tournaments})
+    all_tournaments = Tournament.objects.select_related('created_by').prefetch_related('invites')
+    tournaments = [t for t in all_tournaments if t.is_visible_to(request.user)]
+    my_invites = []
+    if request.user.is_authenticated:
+        profile = getattr(request.user, 'player_profile', None)
+        if profile:
+            my_invites = TournamentInvite.objects.select_related('tournament', 'invited_by').filter(invitee=profile, status='pending')
+    return render(request, 'core/tournament_list.html', {'tournaments': tournaments, 'my_invites': my_invites})
 
 
 def tournament_detail(request, slug):
     tournament = get_object_or_404(Tournament, slug=slug)
+    if not tournament.is_visible_to(request.user):
+        messages.error(request, 'This tournament is private.')
+        return redirect('tournament_list')
     groups = tournament.groups.prefetch_related('memberships__participant__player__user', 'matches__home_player__user', 'matches__away_player__user')
     group_tables = []
     for group in groups:
@@ -664,6 +751,9 @@ def tournament_detail(request, slug):
     knockout = tournament.matches.select_related('home_player__user', 'away_player__user', 'winner__user').exclude(stage='group')
     selected_participants = tournament.participants.select_related('player__user').filter(status='selected')
     reserve_participants = tournament.participants.select_related('player__user').filter(status='reserve')
+    can_manage = tournament.can_manage(request.user)
+    invite_form = TournamentInviteForm(tournament=tournament) if can_manage else None
+    pending_invites = tournament.invites.select_related('invitee__user').filter(status='pending') if can_manage else []
     return render(request, 'core/tournament_detail.html', {
         'tournament': tournament,
         'groups': groups,
@@ -672,6 +762,9 @@ def tournament_detail(request, slug):
         'selected_participants': selected_participants,
         'reserve_participants': reserve_participants,
         'next_stage_format': next_stage_format(tournament.groups.count()),
+        'can_manage': can_manage,
+        'invite_form': invite_form,
+        'pending_invites': pending_invites,
     })
 
 
@@ -679,7 +772,10 @@ def tournament_detail(request, slug):
 def create_tournament(request):
     form = TournamentForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        tournament = form.save()
+        tournament = form.save(commit=False)
+        tournament.visibility = 'public'
+        tournament.created_by = request.user
+        tournament.save()
         messages.success(request, 'Tournament created successfully.')
         return redirect('tournament_detail', slug=tournament.slug)
     if request.method == 'POST':
@@ -687,7 +783,68 @@ def create_tournament(request):
     return render(request, 'core/form_page.html', {'title': 'Create tournament', 'form': form})
 
 
-@staff_required
+@login_required
+def create_private_tournament(request):
+    form = PrivateTournamentForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        tournament = form.save(commit=False)
+        tournament.visibility = 'private'
+        tournament.created_by = request.user
+        tournament.status = 'draft'
+        tournament.save()
+        TournamentParticipant.objects.create(tournament=tournament, player=request.user.player_profile, seed=1, status='selected')
+        messages.success(request, 'Private tournament created. Invite your friends to join.')
+        return redirect('tournament_detail', slug=tournament.slug)
+    if request.method == 'POST':
+        add_form_error_messages(request, form)
+    return render(request, 'core/form_page.html', {'title': 'Create private tournament', 'form': form})
+
+
+@login_required
+@require_POST
+def invite_to_tournament(request, slug):
+    tournament = get_object_or_404(Tournament, slug=slug)
+    if not tournament.can_manage(request.user):
+        messages.error(request, 'You do not have permission to invite players to this tournament.')
+        return redirect('tournament_detail', slug=slug)
+    form = TournamentInviteForm(request.POST, tournament=tournament)
+    if form.is_valid():
+        profile = form.cleaned_data['profile']
+        invite = TournamentInvite.objects.create(tournament=tournament, invited_by=request.user, invitee=profile)
+        create_notification(
+            profile.user,
+            'Tournament invite',
+            f'{request.user.username} invited you to join "{tournament.name}".',
+            'tournament_invite',
+            '/tournaments/',
+        )
+        messages.success(request, f'Invite sent to {profile.user.username}.')
+    else:
+        add_form_error_messages(request, form)
+    return redirect('tournament_detail', slug=slug)
+
+
+@login_required
+@require_POST
+def respond_tournament_invite(request, pk, action):
+    profile = request.user.player_profile
+    invite = get_object_or_404(TournamentInvite, pk=pk, invitee=profile, status='pending')
+    if action == 'accept':
+        invite.status = 'accepted'
+        invite.save(update_fields=['status', 'updated_at'])
+        seed = invite.tournament.participants.count() + 1
+        TournamentParticipant.objects.get_or_create(tournament=invite.tournament, player=profile, defaults={'seed': seed, 'status': 'selected'})
+        if invite.invited_by:
+            create_notification(invite.invited_by, 'Invite accepted', f'{request.user.username} joined "{invite.tournament.name}".', 'tournament_invite', invite.tournament.get_absolute_url())
+        messages.success(request, f'You joined {invite.tournament.name}.')
+    elif action == 'decline':
+        invite.status = 'declined'
+        invite.save(update_fields=['status', 'updated_at'])
+        messages.success(request, 'Invite declined.')
+    return redirect('tournament_list')
+
+
+@tournament_manager_required
 def add_tournament_participant(request, slug):
     tournament = get_object_or_404(Tournament, slug=slug)
     if tournament.participants.count() >= tournament.max_participants:
@@ -750,7 +907,7 @@ def create_group_fixtures(tournament):
             )
 
 
-@staff_required
+@tournament_manager_required
 @require_POST
 def generate_tournament_groups(request, slug):
     tournament = get_object_or_404(Tournament, slug=slug)
@@ -802,7 +959,7 @@ def generate_tournament_groups(request, slug):
     return redirect('tournament_detail', slug=slug)
 
 
-@staff_required
+@tournament_manager_required
 @require_POST
 def generate_group_fixtures(request, slug):
     tournament = get_object_or_404(Tournament, slug=slug, groups_generated=True)
@@ -826,7 +983,7 @@ def qualified_players(tournament):
     return [row['player'] for row in qualified]
 
 
-@staff_required
+@tournament_manager_required
 @require_POST
 def generate_knockout(request, slug):
     tournament = get_object_or_404(Tournament, slug=slug, group_fixtures_generated=True)
@@ -853,9 +1010,12 @@ def generate_knockout(request, slug):
     return redirect('tournament_detail', slug=slug)
 
 
-@staff_required
+@login_required
 def update_tournament_match(request, pk):
     match = get_object_or_404(TournamentMatch.objects.select_related('tournament'), pk=pk)
+    if not match.tournament.can_manage(request.user):
+        messages.error(request, 'You do not have permission to manage this tournament.')
+        return redirect('tournament_detail', slug=match.tournament.slug)
     form = TournamentMatchScoreForm(request.POST or None, instance=match)
     if request.method == 'POST' and form.is_valid():
         match = form.save()

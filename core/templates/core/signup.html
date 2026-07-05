@@ -1,8 +1,17 @@
 {% extends 'core/base.html' %}
-{% block title %}Sign up · PESOS{% endblock %}
+{% load static %}
+{% block title %}Sign up · PESaWis{% endblock %}
 {% block content %}
-<section class="auth-card">
-  <h1>Create player account</h1>
-  <form method="post" class="form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Sign up</button></form>
+<section class="auth-split">
+  <div class="auth-branding">
+    <span class="brand-badge"><img src="{% static 'images/pesawis-crest.svg' %}" alt="PESaWis crest" class="site-logo"></span>
+    <h2>Join the league.</h2>
+    <p>Create your player profile, join divisions, play friendlies and climb the rankings.</p>
+  </div>
+  <div class="auth-panel">
+    <h1>Create your account</h1>
+    <form method="post" class="form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Sign up</button></form>
+    <p class="muted">Already have an account? <a href="{% url 'login' %}">Login</a>.</p>
+  </div>
 </section>
 {% endblock %}

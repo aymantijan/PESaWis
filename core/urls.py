@@ -4,11 +4,14 @@ from . import views
 
 urlpatterns = [
     path('', views.home, name='home'),
+    path('sw.js', views.service_worker, name='service_worker'),
     path('rules/', views.rules, name='rules'),
     path('signup/', views.signup, name='signup'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('notifications/', views.notifications, name='notifications'),
     path('notifications/<int:pk>/read/', views.mark_notification_read, name='mark_notification_read'),
+    path('notifications/push/subscribe/', views.push_subscribe, name='push_subscribe'),
+    path('notifications/push/unsubscribe/', views.push_unsubscribe, name='push_unsubscribe'),
     path('profile/edit/', views.edit_profile, name='edit_profile'),
 
     path('leagues/', views.league_list, name='league_list'),
@@ -35,7 +38,10 @@ urlpatterns = [
     path('news/<int:pk>/<str:reaction>/', views.react_post, name='react_post'),
 
     path('tournaments/', views.tournament_list, name='tournament_list'),
+    path('tournaments/new-private/', views.create_private_tournament, name='create_private_tournament'),
+    path('tournaments/invites/<int:pk>/<str:action>/', views.respond_tournament_invite, name='respond_tournament_invite'),
     path('tournaments/<slug:slug>/', views.tournament_detail, name='tournament_detail'),
+    path('tournaments/<slug:slug>/invite/', views.invite_to_tournament, name='invite_to_tournament'),
     path('tournaments/<slug:slug>/participants/new/', views.add_tournament_participant, name='add_tournament_participant'),
     path('tournaments/<slug:slug>/generate-groups/', views.generate_tournament_groups, name='generate_tournament_groups'),
     path('tournaments/<slug:slug>/generate-group-fixtures/', views.generate_group_fixtures, name='generate_group_fixtures'),

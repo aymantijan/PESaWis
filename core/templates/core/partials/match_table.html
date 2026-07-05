@@ -9,7 +9,7 @@
         <td>{{ match.get_match_type_display }}</td>
         <td>{% if match.division %}{{ match.division.name }}{% else %}-{% endif %}</td>
         <td>{{ match.home_player.user.username }} vs {{ match.away_player.user.username }}</td>
-        <td><span class="badge">{{ match.get_status_display }}</span></td>
+        <td><span class="status-pill status-{{ match.status }}">{{ match.get_status_display }}</span></td>
         <td>{% if match.has_score %}{{ match.home_score }} - {{ match.away_score }}{% else %}-{% endif %}</td>
         {% if management or user.is_staff %}<td><a href="{% url 'update_match_score' match.pk %}">Edit</a></td>{% endif %}
       </tr>

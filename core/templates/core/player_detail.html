@@ -1,23 +1,26 @@
 {% extends 'core/base.html' %}
 {% block title %}{{ profile.user.username }} - PESOS{% endblock %}
 {% block content %}
-<section class="page-head">
-  <div>
-    {% if profile.profile_photo %}<img class="avatar large" src="{{ profile.profile_photo.url }}" alt="{{ profile.user.username }} profile photo">{% else %}<span class="avatar large">{{ profile.initials }}</span>{% endif %}
-    <h1>{{ profile.user.username }}</h1>
-    <p>{{ profile.full_name|default:profile.user.get_full_name|default:'No full name' }} · Konami ID: {{ profile.konami_id }}</p>
-    <p>Division: {% if division_membership %}{{ division_membership.division.name }}{% else %}None{% endif %}</p>
+<section class="profile-header">
+  {% if profile.profile_photo %}<img class="avatar large ring" src="{{ profile.profile_photo.url }}" alt="{{ profile.user.username }} profile photo">{% else %}<span class="avatar large ring">{{ profile.initials }}</span>{% endif %}
+  <div class="profile-header-body">
+    <div class="profile-header-top">
+      <h1>{{ profile.user.username }}</h1>
+      {% if user.is_authenticated and user != profile.user %}<a class="button small" href="{% url 'request_friendly_match' profile.user.username %}">⚔️ Request friendly match</a>{% endif %}
+      {% if user == profile.user %}<a class="button small ghost" href="{% url 'edit_profile' %}">Edit profile</a>{% endif %}
+    </div>
+    <p class="profile-meta">{{ profile.full_name|default:profile.user.get_full_name|default:'No full name' }} · Konami ID: {{ profile.konami_id }}</p>
+    <p class="profile-meta">📍 {{ profile.city|default:'No city' }} · Division: {% if division_membership %}{{ division_membership.division.name }}{% else %}None{% endif %}</p>
+    {% if profile.bio %}<p>{{ profile.bio }}</p>{% endif %}
+    <div class="profile-stats">
+      <div><strong>{{ stat.played }}</strong><span>Matches</span></div>
+      <div><strong>{{ stat.wins }}</strong><span>Wins</span></div>
+      <div><strong>{{ stat.draws }}</strong><span>Draws</span></div>
+      <div><strong>{{ stat.losses }}</strong><span>Losses</span></div>
+      <div><strong>{{ stat.goals_for }}-{{ stat.goals_against }}</strong><span>Goals</span></div>
+      <div><strong>{{ stat.points }}</strong><span>Points</span></div>
+    </div>
   </div>
-  {% if user.is_authenticated and user != profile.user %}<a class="button" href="{% url 'request_friendly_match' profile.user.username %}">Request friendly match</a>{% endif %}
-</section>
-<section class="stats-grid">
-  <div><strong>{{ stat.played }}</strong><span>Matches</span></div>
-  <div><strong>{{ stat.wins }}</strong><span>Wins</span></div>
-  <div><strong>{{ stat.draws }}</strong><span>Draws</span></div>
-  <div><strong>{{ stat.losses }}</strong><span>Losses</span></div>
-  <div><strong>{{ stat.goals_for }}</strong><span>Goals scored</span></div>
-  <div><strong>{{ stat.goals_against }}</strong><span>Goals conceded</span></div>
-  <div><strong>{{ stat.points }}</strong><span>Points</span></div>
 </section>
 <section><h2>Match history</h2>{% if matches %}{% include 'core/partials/match_table.html' with matches=matches %}{% else %}<div class="empty">No matches yet.</div>{% endif %}</section>
 <section class="grid two">

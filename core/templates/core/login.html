@@ -1,9 +1,17 @@
 {% extends 'core/base.html' %}
-{% block title %}Login · PESOS{% endblock %}
+{% load static %}
+{% block title %}Login · PESaWis{% endblock %}
 {% block content %}
-<section class="auth-card">
-  <h1>Login</h1>
-  <form method="post" class="form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Login</button></form>
-  <p class="muted">No account yet? <a href="{% url 'signup' %}">Create one</a>.</p>
+<section class="auth-split">
+  <div class="auth-branding">
+    <span class="brand-badge"><img src="{% static 'images/pesawis-crest.svg' %}" alt="PESaWis crest" class="site-logo"></span>
+    <h2>Welcome back.</h2>
+    <p>Log in to check your standings, play friendlies and catch up on the feed.</p>
+  </div>
+  <div class="auth-panel">
+    <h1>Login</h1>
+    <form method="post" class="form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Login</button></form>
+    <p class="muted">No account yet? <a href="{% url 'signup' %}">Create one</a>.</p>
+  </div>
 </section>
 {% endblock %}

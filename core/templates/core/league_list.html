@@ -5,7 +5,7 @@
 <form class="toolbar"><input name="q" value="{{ q }}" placeholder="Search leagues"><button class="button small">Search</button></form>
 <div class="grid three">
 {% for league in leagues %}
-  <article class="card"><h2><a href="{{ league.get_absolute_url }}">{{ league.name }}</a></h2><p>{{ league.description|default:'No description yet.' }}</p><p class="muted">{{ league.member_count }} members · {{ league.season_count }} seasons</p></article>
+  <article class="card"><h2>🏆 <a href="{{ league.get_absolute_url }}">{{ league.name }}</a></h2><p>{{ league.description|default:'No description yet.' }}</p><p class="muted">👥 {{ league.member_count }} members · {{ league.season_count }} seasons</p></article>
 {% empty %}<div class="empty wide">No public league yet.</div>{% endfor %}
 </div>
 {% endblock %}

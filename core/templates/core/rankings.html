@@ -1,10 +1,10 @@
 {% extends 'core/base.html' %}
 {% block title %}Rankings - PESOS{% endblock %}
 {% block content %}
-<section class="page-head"><h1>Rankings</h1></section>
+<section class="page-head"><div><h1>Rankings</h1><p>Season leaders across the whole league.</p></div></section>
 <section class="grid three">
-  <article class="panel"><h2>Best Players</h2>{% include 'core/partials/ranking_list.html' with rows=best_players metric='points' %}</article>
-  <article class="panel"><h2>Top Scorers</h2>{% include 'core/partials/ranking_list.html' with rows=top_scorers metric='goals_for' %}</article>
-  <article class="panel"><h2>Best Defenders</h2>{% include 'core/partials/ranking_list.html' with rows=best_defenders metric='goals_against' %}</article>
+  <article class="panel"><h2>🏅 Best Players</h2>{% include 'core/partials/ranking_list.html' with rows=best_players metric='points' %}</article>
+  <article class="panel"><h2>⚽ Top Scorers</h2>{% include 'core/partials/ranking_list.html' with rows=top_scorers metric='goals_for' %}</article>
+  <article class="panel"><h2>🛡️ Best Defenders</h2>{% include 'core/partials/ranking_list.html' with rows=best_defenders metric='goals_against' %}</article>
 </section>
 {% endblock %}

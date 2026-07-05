@@ -1,24 +1,26 @@
 {% extends 'core/base.html' %}
+{% load core_extras %}
 {% block title %}Notifications - PESOS{% endblock %}
 {% block content %}
-<section class="page-head"><h1>Notifications</h1></section>
+<section class="page-head"><div><h1>🔔 Notifications</h1><p>Tags, invites, matches and comments — all in one place.</p></div></section>
 
 <section class="panel">
   {% if not preference.enabled %}
-    <p class="empty">Notifications are disabled. Enable them to receive updates.</p>
+    <p class="empty">Notifications are disabled. Enable them below to receive in-app and push updates.</p>
   {% endif %}
   <form method="post" class="form compact-form">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Save preferences</button></form>
 </section>
 
 <section>
-  <h2>Recent notifications</h2>
+  <h2>Recent activity</h2>
   <div class="stack">
     {% for notification in notifications %}
-    <div class="list-card {% if notification.is_read %}muted-card{% endif %}">
-      <div>
+    <div class="list-card notif-row {% if notification.is_read %}muted-card{% endif %}">
+      <span class="avatar notif-icon">{{ notification.notification_type|notification_icon }}</span>
+      <div class="notif-body">
         <strong>{{ notification.title }}</strong>
         <p class="muted">{{ notification.message }}</p>
-        {% if notification.link %}<a href="{{ notification.link }}">Open</a>{% endif %}
+        {% if notification.link %}<a href="{{ notification.link }}">Open →</a>{% endif %}
       </div>
       <div class="inline-actions">
         <span class="badge">{{ notification.get_notification_type_display }}</span>

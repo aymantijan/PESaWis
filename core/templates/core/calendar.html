@@ -1,7 +1,7 @@
 {% extends 'core/base.html' %}
 {% block title %}Calendar - PESOS{% endblock %}
 {% block content %}
-<section class="page-head"><h1>Calendar</h1>{% if user.is_staff %}<a class="button small" href="{% url 'create_calendar' %}">Create Calendar</a>{% endif %}</section>
+<section class="page-head"><div><h1>📅 Calendar</h1><p>Every scheduled, played and friendly match.</p></div>{% if user.is_staff %}<a class="button small" href="{% url 'create_calendar' %}">Create Calendar</a>{% endif %}</section>
 <form class="toolbar">
   <select name="status"><option value="">All statuses</option><option value="scheduled" {% if status == 'scheduled' %}selected{% endif %}>Scheduled</option><option value="played" {% if status == 'played' %}selected{% endif %}>Played</option></select>
   <select name="division"><option value="">All divisions</option>{% for division in divisions %}<option value="{{ division.id }}" {% if division_id == division.id|stringformat:'s' %}selected{% endif %}>{{ division.name }}</option>{% endfor %}</select>

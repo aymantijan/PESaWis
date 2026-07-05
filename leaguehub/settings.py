@@ -46,6 +46,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'core.context_processors.notification_badge',
+                'core.context_processors.live_ticker',
             ],
         },
     },
@@ -82,3 +83,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'home'
+
+# Web Push (browser/phone notifications for tags, invites, etc.)
+# Generated once for this project with py-vapid; rotate via env vars in production.
+VAPID_PUBLIC_KEY = os.environ.get(
+    'VAPID_PUBLIC_KEY',
+    'BCGgKG21DowoN_PaRICWtv1-Zxoio51uRxRcWrJEGB0oZox_DrI_2rLwaMVltuE7OANLmLZ30gYQTtE1Zf9VjpY',
+)
+VAPID_PRIVATE_KEY = os.environ.get(
+    'VAPID_PRIVATE_KEY',
+    '-----BEGIN PRIVATE KEY-----\n'
+    'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQggIdzzSPlnJSoQO4n\n'
+    'iwyjIrs2K/Z/VrZHijykCI2/FVShRANCAAQhoChttQ6MKDfz2kSAlrb9fmcaIqOd\n'
+    'bkcUXFqyRBgdKGaMfw6yP9qy8GjFZbbhOzgDS5i2d9IGEE7RNWX/VY6W\n'
+    '-----END PRIVATE KEY-----\n',
+)
+VAPID_CLAIM_EMAIL = os.environ.get('VAPID_CLAIM_EMAIL', 'admin@pesawis.local')
