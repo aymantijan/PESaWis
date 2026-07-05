@@ -449,13 +449,41 @@ def active_streams():
     return LiveStream.objects.select_related('streamer').filter(status='live', updated_at__gte=cutoff)
 
 
+def streamable_matches(profile):
+    """Scheduled matches the player can attach a stream to (they play in it)."""
+    own = Q(home_player=profile) | Q(away_player=profile)
+    league_matches = Match.objects.select_related('home_player__user', 'away_player__user', 'division').filter(own, status='scheduled').order_by('scheduled_at', 'id')[:20]
+    tournament_matches = TournamentMatch.objects.select_related('home_player__user', 'away_player__user', 'tournament').filter(own, status='scheduled').order_by('round_number', 'id')[:20]
+    return league_matches, tournament_matches
+
+
 @login_required
 @require_POST
 def stream_start(request):
-    title = request.POST.get('title', '').strip() or f"Live match — {request.user.username}"
+    profile = request.user.player_profile
+    title = request.POST.get('title', '').strip()
+    match = None
+    tournament_match = None
+    match_ref = request.POST.get('match', '').strip()
+    if match_ref.startswith('m-'):
+        match = Match.objects.filter(pk=match_ref[2:], status='scheduled').filter(Q(home_player=profile) | Q(away_player=profile)).first()
+        if match is None:
+            messages.error(request, 'You can only link a stream to one of your own scheduled matches.')
+            return redirect('news_feed')
+    elif match_ref.startswith('t-'):
+        tournament_match = TournamentMatch.objects.select_related('tournament').filter(pk=match_ref[2:], status='scheduled').filter(Q(home_player=profile) | Q(away_player=profile)).first()
+        if tournament_match is None:
+            messages.error(request, 'You can only link a stream to one of your own scheduled matches.')
+            return redirect('news_feed')
+    if not title:
+        linked = tournament_match or match
+        if linked:
+            title = f'{linked.home_player.user.username} vs {linked.away_player.user.username} — LIVE'
+        else:
+            title = f'Live match — {request.user.username}'
     now = timezone.now()
     LiveStream.objects.filter(streamer=request.user, status='live').update(status='ended', ended_at=now)
-    stream = LiveStream.objects.create(streamer=request.user, title=title[:160])
+    stream = LiveStream.objects.create(streamer=request.user, title=title[:160], match=match, tournament_match=tournament_match)
     return redirect('stream_broadcast', pk=stream.pk)
 
 
@@ -550,11 +578,21 @@ def news_feed(request):
             return redirect('news_feed')
         add_form_error_messages(request, form)
     posts = NewsPost.objects.select_related('author').prefetch_related('comments__author', 'comments__tagged_users', 'reactions', 'tagged_users')
+    my_league_matches, my_tournament_matches = [], []
+    if request.user.is_authenticated:
+        profile = getattr(request.user, 'player_profile', None)
+        if profile:
+            my_league_matches, my_tournament_matches = streamable_matches(profile)
     return render(request, 'core/news_feed.html', {
         'posts': posts,
         'form': form,
         'comment_form': NewsCommentForm(),
-        'live_streams': active_streams(),
+        'live_streams': active_streams().select_related(
+            'match__home_player__user', 'match__away_player__user', 'match__division',
+            'tournament_match__home_player__user', 'tournament_match__away_player__user', 'tournament_match__tournament',
+        ),
+        'my_league_matches': my_league_matches,
+        'my_tournament_matches': my_tournament_matches,
     })
 
 

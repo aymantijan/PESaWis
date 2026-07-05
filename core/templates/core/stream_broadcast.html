@@ -3,6 +3,7 @@
 {% block content %}
 <section class="page-head">
   <h1>🔴 You are live</h1>
+  {% if stream.linked_match_label %}<p><strong>⚽ {{ stream.linked_match_label }}</strong></p>{% endif %}
   <p>{{ stream.title }} — share your screen, then switch to your game. Your screen is streamed peer-to-peer to viewers; nothing is recorded or stored on the server. When the match is over, come back here and end the stream.</p>
 </section>
 

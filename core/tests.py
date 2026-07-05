@@ -519,6 +519,53 @@ class LiveStreamTests(TestCase):
         self.assertEqual(stream.status, 'ended')
         self.assertEqual(StreamSignal.objects.filter(stream=stream).count(), 0)
 
+    def test_stream_linked_to_own_match_and_rejects_others_matches(self):
+        player_a = make_user('linka', 'KONAMI-820')
+        player_b = make_user('linkb', 'KONAMI-821')
+        player_c = make_user('linkc', 'KONAMI-822')
+        my_match = Match.objects.create(
+            match_type='friendly', home_player=player_a.player_profile,
+            away_player=player_b.player_profile, status='scheduled',
+        )
+        others_match = Match.objects.create(
+            match_type='friendly', home_player=player_b.player_profile,
+            away_player=player_c.player_profile, status='scheduled',
+        )
+        from .models import LiveStream
+        self.client.login(username='linka', password='StrongPass12345!')
+
+        # linking someone else's match is refused
+        response = self.client.post(reverse('stream_start'), {'match': f'm-{others_match.pk}'})
+        self.assertRedirects(response, reverse('news_feed'))
+        self.assertFalse(LiveStream.objects.filter(streamer=player_a).exists())
+
+        # linking my own match works and builds a default title
+        self.client.post(reverse('stream_start'), {'match': f'm-{my_match.pk}'})
+        stream = LiveStream.objects.get(streamer=player_a, status='live')
+        self.assertEqual(stream.match_id, my_match.pk)
+        self.assertIn('linka vs linkb', stream.title)
+        self.assertIn('linka vs linkb', stream.linked_match_label)
+
+        # the linked match label appears in the feed
+        response = self.client.get(reverse('news_feed'))
+        self.assertContains(response, stream.title)
+
+    def test_stream_linked_to_tournament_match(self):
+        player_a = make_user('tstreama', 'KONAMI-830')
+        player_b = make_user('tstreamb', 'KONAMI-831')
+        tournament = Tournament.objects.create(name='Kas Stream')
+        t_match = TournamentMatch.objects.create(
+            tournament=tournament, stage='final', round_number=1,
+            home_player=player_a.player_profile, away_player=player_b.player_profile,
+        )
+        from .models import LiveStream
+        self.client.login(username='tstreamb', password='StrongPass12345!')
+        self.client.post(reverse('stream_start'), {'match': f't-{t_match.pk}', 'title': 'La finale!'})
+        stream = LiveStream.objects.get(streamer=player_b, status='live')
+        self.assertEqual(stream.tournament_match_id, t_match.pk)
+        self.assertIn('Kas Stream', stream.linked_match_label)
+        self.assertIn('Final', stream.linked_match_label)
+
     def test_feed_lists_live_streams(self):
         broadcaster = make_user('caster2', 'KONAMI-810')
         from .models import LiveStream

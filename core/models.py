@@ -563,6 +563,8 @@ class LiveStream(TimeStampedModel):
     title = models.CharField(max_length=160)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='live')
     ended_at = models.DateTimeField(null=True, blank=True)
+    match = models.ForeignKey('Match', on_delete=models.SET_NULL, null=True, blank=True, related_name='live_streams')
+    tournament_match = models.ForeignKey('TournamentMatch', on_delete=models.SET_NULL, null=True, blank=True, related_name='live_streams')
 
     class Meta:
         ordering = ['-created_at']
@@ -572,6 +574,17 @@ class LiveStream(TimeStampedModel):
 
     def get_absolute_url(self):
         return reverse('stream_watch', kwargs={'pk': self.pk})
+
+    @property
+    def linked_match_label(self):
+        if self.tournament_match:
+            m = self.tournament_match
+            return f'{m.home_player.user.username} vs {m.away_player.user.username} · {m.tournament.name} ({m.get_stage_display()})'
+        if self.match:
+            m = self.match
+            context = m.division.name if m.division else m.get_match_type_display()
+            return f'{m.home_player.user.username} vs {m.away_player.user.username} · {context}'
+        return ''
 
 
 class StreamSignal(TimeStampedModel):

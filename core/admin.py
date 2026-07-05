@@ -141,7 +141,7 @@ class TournamentAdmin(admin.ModelAdmin):
 
 @admin.register(LiveStream)
 class LiveStreamAdmin(admin.ModelAdmin):
-    list_display = ('title', 'streamer', 'status', 'created_at', 'ended_at')
+    list_display = ('title', 'streamer', 'status', 'match', 'tournament_match', 'created_at', 'ended_at')
     list_filter = ('status',)
     search_fields = ('title', 'streamer__username')
 

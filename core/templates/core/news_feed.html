@@ -8,9 +8,10 @@
   <h2 style="margin-top:0;">🔴 Live now</h2>
   <ul class="list-unstyled" style="margin:0; padding:0; list-style:none;">
     {% for stream in live_streams %}
-    <li style="display:flex; align-items:center; gap:.6rem; padding:.35rem 0;">
+    <li style="display:flex; align-items:center; gap:.6rem; padding:.35rem 0; flex-wrap:wrap;">
       <span style="color:#e11d48; font-weight:700;">● LIVE</span>
       <strong>{{ stream.title }}</strong>
+      {% if stream.linked_match_label %}<span class="muted">⚽ {{ stream.linked_match_label }}</span>{% endif %}
       <span class="muted">by {{ stream.streamer.username }}</span>
       <a class="btn btn-small" href="{% url 'stream_watch' stream.pk %}">Watch</a>
     </li>
@@ -24,6 +25,25 @@
   <form method="post" action="{% url 'stream_start' %}" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
     {% csrf_token %}
     <input type="text" name="title" maxlength="160" placeholder="Stream your match live by sharing your screen (nothing is recorded)" style="flex:1; min-width:220px;">
+    {% if my_league_matches or my_tournament_matches %}
+    <select name="match" style="min-width:200px;">
+      <option value="">No linked match (free stream)</option>
+      {% if my_tournament_matches %}
+      <optgroup label="My tournament matches">
+        {% for m in my_tournament_matches %}
+        <option value="t-{{ m.pk }}">{{ m.home_player.user.username }} vs {{ m.away_player.user.username }} — {{ m.tournament.name }} ({{ m.get_stage_display }})</option>
+        {% endfor %}
+      </optgroup>
+      {% endif %}
+      {% if my_league_matches %}
+      <optgroup label="My league &amp; friendly matches">
+        {% for m in my_league_matches %}
+        <option value="m-{{ m.pk }}">{{ m.home_player.user.username }} vs {{ m.away_player.user.username }}{% if m.division %} — {{ m.division.name }}{% else %} — {{ m.get_match_type_display }}{% endif %}{% if m.round_number %} (R{{ m.round_number }}){% endif %}</option>
+        {% endfor %}
+      </optgroup>
+      {% endif %}
+    </select>
+    {% endif %}
     <button class="btn" type="submit">🔴 Go live</button>
   </form>
 </section>

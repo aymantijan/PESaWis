@@ -3,6 +3,7 @@
 {% block content %}
 <section class="page-head">
   <h1>{% if stream.status == 'live' %}🔴{% else %}⏹{% endif %} {{ stream.title }}</h1>
+  {% if stream.linked_match_label %}<p><strong>⚽ {{ stream.linked_match_label }}</strong></p>{% endif %}
   <p>Streamed live by <a href="{% url 'player_detail' stream.streamer.username %}">{{ stream.streamer.username }}</a> — peer-to-peer, nothing is recorded.</p>
 </section>
 
