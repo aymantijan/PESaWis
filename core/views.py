@@ -440,8 +440,12 @@ def handle_friendly_request(request, pk, action):
 
 
 def active_streams():
-    """Streams currently live with a recent broadcaster heartbeat."""
-    cutoff = timezone.now() - timedelta(seconds=90)
+    """Streams currently live with a recent broadcaster heartbeat.
+
+    The window is generous (5 minutes) because the broadcaster's browser is
+    backgrounded while they play, which throttles the heartbeat polling.
+    """
+    cutoff = timezone.now() - timedelta(minutes=5)
     return LiveStream.objects.select_related('streamer').filter(status='live', updated_at__gte=cutoff)
 
 

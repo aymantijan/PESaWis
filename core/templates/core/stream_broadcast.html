@@ -3,14 +3,19 @@
 {% block content %}
 <section class="page-head">
   <h1>🔴 You are live</h1>
-  <p>{{ stream.title }} — point your phone camera at the match. Video goes peer-to-peer to viewers; nothing is recorded or stored on the server.</p>
+  <p>{{ stream.title }} — share your screen, then switch to your game. Your screen is streamed peer-to-peer to viewers; nothing is recorded or stored on the server. When the match is over, come back here and end the stream.</p>
 </section>
 
 <section class="card">
   <video id="local-video" autoplay muted playsinline style="width:100%; max-height:60vh; background:#000; border-radius:8px;"></video>
-  <p id="stream-status" class="muted" style="margin:.6rem 0;">Starting camera…</p>
+  <p id="stream-status" class="muted" style="margin:.6rem 0;">Waiting to start…</p>
+  <ol class="muted" style="margin:.4rem 0 .8rem; padding-left:1.2rem;">
+    <li>Tap <strong>Start screen sharing</strong> and allow screen capture.</li>
+    <li>Switch to eFootball and play — keep this browser open in the background.</li>
+    <li>After the match, come back and tap <strong>End stream</strong>.</li>
+  </ol>
   <div style="display:flex; gap:.6rem; flex-wrap:wrap;">
-    <button id="flip-camera" class="btn" type="button">🔄 Flip camera</button>
+    <button id="start-share" class="btn" type="button">🖥️ Start screen sharing</button>
     <form method="post" action="{% url 'stream_stop' stream.pk %}">{% csrf_token %}
       <button class="btn danger" type="submit">⏹ End stream</button>
     </form>
@@ -23,38 +28,45 @@
   const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
   const statusEl = document.getElementById('stream-status');
   const videoEl = document.getElementById('local-video');
+  const startBtn = document.getElementById('start-share');
   const peers = {};   // peer_id -> RTCPeerConnection
   let media = null;
   let lastSignal = 0;
-  let facing = 'environment';
   const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-  async function startCamera() {
-    if (media) { media.getTracks().forEach(t => t.stop()); }
+  async function startScreenShare() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      statusEl.textContent = 'Screen sharing is not supported by this browser. On iPhone, use Safari 16+; on Android, use Chrome.';
+      return;
+    }
     try {
-      media = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true,
+      media = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30 } },
+        audio: true,   // game audio when the device/browser allows it
       });
     } catch (err) {
-      statusEl.textContent = 'Camera error: ' + err.message;
+      statusEl.textContent = 'Screen capture was cancelled or refused: ' + err.message;
       return;
     }
     videoEl.srcObject = media;
-    statusEl.textContent = 'Live — waiting for viewers…';
-    // replace tracks on existing connections (after a camera flip)
+    startBtn.textContent = '🖥️ Restart screen sharing';
+    statusEl.textContent = 'Live — your screen is being streamed. You can now switch to your game.';
+
+    // if the user stops sharing from the system UI, reflect it here
+    media.getVideoTracks()[0].addEventListener('ended', () => {
+      statusEl.textContent = 'Screen sharing stopped. Start again, or end the stream below.';
+    });
+
+    // replace tracks on existing viewer connections (after a restart)
     Object.values(peers).forEach(pc => {
       pc.getSenders().forEach(sender => {
-        const track = media.getTracks().find(t => t.kind === sender.track?.kind);
+        const track = media.getTracks().find(t => t.kind === (sender.track ? sender.track.kind : 'video'));
         if (track) sender.replaceTrack(track);
       });
     });
   }
 
-  document.getElementById('flip-camera').addEventListener('click', () => {
-    facing = facing === 'environment' ? 'user' : 'environment';
-    startCamera();
-  });
+  startBtn.addEventListener('click', startScreenShare);
 
   function sendSignal(kind, peerId, payload) {
     return fetch(`/live/${streamId}/signal/`, {
@@ -82,8 +94,9 @@
   }
 
   function updateViewerCount() {
+    if (!media) return;
     const n = Object.keys(peers).length;
-    statusEl.textContent = n ? `Live — ${n} viewer(s) connected.` : 'Live — waiting for viewers…';
+    statusEl.textContent = n ? `Live — ${n} viewer(s) watching your screen.` : 'Live — your screen is being streamed. You can now switch to your game.';
   }
 
   async function poll() {
@@ -107,7 +120,6 @@
     } catch (e) { /* transient network error: keep polling */ }
   }
 
-  startCamera();
   setInterval(poll, 2000);
   window.addEventListener('beforeunload', () => {
     Object.values(peers).forEach(pc => pc.close());

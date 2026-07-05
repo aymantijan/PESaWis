@@ -23,7 +23,7 @@
 <section class="card">
   <form method="post" action="{% url 'stream_start' %}" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
     {% csrf_token %}
-    <input type="text" name="title" maxlength="160" placeholder="Stream a match live from your phone (nothing is recorded)" style="flex:1; min-width:220px;">
+    <input type="text" name="title" maxlength="160" placeholder="Stream your match live by sharing your screen (nothing is recorded)" style="flex:1; min-width:220px;">
     <button class="btn" type="submit">🔴 Go live</button>
   </form>
 </section>

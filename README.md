@@ -17,7 +17,7 @@ Simple Django app for managing a PES/eFootball league with divisions, calendar, 
 - The draw and all fixtures are generated automatically as soon as the tournament is full (or via the "Run Draw" button).
 
 **Live streaming**
-- Any player can go live from the Feed (`🔴 Go live`) and stream a match from their phone camera. Video is sent peer-to-peer over WebRTC — the server only relays signaling and nothing is ever recorded or stored.
+- Any player can go live from the Feed (`🔴 Go live`): start screen sharing, switch to eFootball and play, then come back and end the stream. The screen is sent peer-to-peer over WebRTC — the server only relays signaling and nothing is ever recorded or stored.
 
 ## Local Installation on Windows
 
