@@ -2,6 +2,23 @@
 
 Simple Django app for managing a PES/eFootball league with divisions, calendar, feed, friendly requests, player profiles, standings and tournaments.
 
+## Competition Rules (football / FIFA logic)
+
+**Championship (Leagues → Seasons → Divisions)**
+- A division holds up to 12 players.
+- The calendar is a real round-robin (circle method): every player plays exactly once per round; double round-robin mirrors home & away legs. Optional kick-off date schedules one round per week.
+- At the end of a season: the winner of Division 1 is the champion, the top 2 of each lower division are promoted, and the bottom 2 of each division are relegated. `Apply promotion/relegation` moves the memberships automatically.
+
+**Tournaments ("Kas dial lma" and private cups)**
+- The organizer chooses the format: group stage + knockout (default), direct knockout, or a single round-robin league.
+- Groups of 4, snake-seeded from player rankings (FIFA pots). Official format plays home & away inside groups; the organizer can pick single round instead.
+- Top 2 of each group qualify. With 2/4/8 groups the bracket uses the exact FIFA cross-pairings (A1–B2, B1–A2, …) so group rivals can only meet again in the final. With other group counts, the best third-placed players complete the bracket (Euro style).
+- Tied knockout matches are decided by a penalty shoot-out score (or a manual winner). Semi-final losers play a third-place match. The champion is crowned automatically after the final.
+- The draw and all fixtures are generated automatically as soon as the tournament is full (or via the "Run Draw" button).
+
+**Live streaming**
+- Any player can go live from the Feed (`🔴 Go live`) and stream a match from their phone camera. Video is sent peer-to-peer over WebRTC — the server only relays signaling and nothing is ever recorded or stored.
+
 ## Local Installation on Windows
 
 ```powershell

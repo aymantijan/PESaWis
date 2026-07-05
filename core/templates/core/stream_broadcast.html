@@ -1,0 +1,118 @@
+{% extends 'core/base.html' %}
+{% block title %}Broadcasting — {{ stream.title }}{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>🔴 You are live</h1>
+  <p>{{ stream.title }} — point your phone camera at the match. Video goes peer-to-peer to viewers; nothing is recorded or stored on the server.</p>
+</section>
+
+<section class="card">
+  <video id="local-video" autoplay muted playsinline style="width:100%; max-height:60vh; background:#000; border-radius:8px;"></video>
+  <p id="stream-status" class="muted" style="margin:.6rem 0;">Starting camera…</p>
+  <div style="display:flex; gap:.6rem; flex-wrap:wrap;">
+    <button id="flip-camera" class="btn" type="button">🔄 Flip camera</button>
+    <form method="post" action="{% url 'stream_stop' stream.pk %}">{% csrf_token %}
+      <button class="btn danger" type="submit">⏹ End stream</button>
+    </form>
+  </div>
+</section>
+
+<script>
+(function () {
+  const streamId = {{ stream.pk }};
+  const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  const statusEl = document.getElementById('stream-status');
+  const videoEl = document.getElementById('local-video');
+  const peers = {};   // peer_id -> RTCPeerConnection
+  let media = null;
+  let lastSignal = 0;
+  let facing = 'environment';
+  const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+  async function startCamera() {
+    if (media) { media.getTracks().forEach(t => t.stop()); }
+    try {
+      media = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true,
+      });
+    } catch (err) {
+      statusEl.textContent = 'Camera error: ' + err.message;
+      return;
+    }
+    videoEl.srcObject = media;
+    statusEl.textContent = 'Live — waiting for viewers…';
+    // replace tracks on existing connections (after a camera flip)
+    Object.values(peers).forEach(pc => {
+      pc.getSenders().forEach(sender => {
+        const track = media.getTracks().find(t => t.kind === sender.track?.kind);
+        if (track) sender.replaceTrack(track);
+      });
+    });
+  }
+
+  document.getElementById('flip-camera').addEventListener('click', () => {
+    facing = facing === 'environment' ? 'user' : 'environment';
+    startCamera();
+  });
+
+  function sendSignal(kind, peerId, payload) {
+    return fetch(`/live/${streamId}/signal/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({ kind: kind, target: 'viewer', peer_id: peerId, payload: JSON.stringify(payload || {}) }),
+    });
+  }
+
+  async function handleJoin(peerId) {
+    if (!media || peers[peerId]) return;
+    const pc = new RTCPeerConnection(rtcConfig);
+    peers[peerId] = pc;
+    media.getTracks().forEach(track => pc.addTrack(track, media));
+    pc.onicecandidate = e => { if (e.candidate) sendSignal('ice', peerId, e.candidate); };
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+        pc.close(); delete peers[peerId]; updateViewerCount();
+      }
+    };
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await sendSignal('offer', peerId, offer);
+    updateViewerCount();
+  }
+
+  function updateViewerCount() {
+    const n = Object.keys(peers).length;
+    statusEl.textContent = n ? `Live — ${n} viewer(s) connected.` : 'Live — waiting for viewers…';
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch(`/live/${streamId}/poll/?role=broadcaster&after=${lastSignal}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const sig of data.signals) {
+        lastSignal = Math.max(lastSignal, sig.id);
+        const pc = peers[sig.peer_id];
+        if (sig.kind === 'join') {
+          await handleJoin(sig.peer_id);
+        } else if (sig.kind === 'answer' && pc) {
+          await pc.setRemoteDescription(JSON.parse(sig.payload));
+        } else if (sig.kind === 'ice' && pc) {
+          try { await pc.addIceCandidate(JSON.parse(sig.payload)); } catch (e) {}
+        } else if (sig.kind === 'leave' && pc) {
+          pc.close(); delete peers[sig.peer_id]; updateViewerCount();
+        }
+      }
+    } catch (e) { /* transient network error: keep polling */ }
+  }
+
+  startCamera();
+  setInterval(poll, 2000);
+  window.addEventListener('beforeunload', () => {
+    Object.values(peers).forEach(pc => pc.close());
+    if (media) media.getTracks().forEach(t => t.stop());
+  });
+})();
+</script>
+{% endblock %}

@@ -30,6 +30,12 @@ urlpatterns = [
     path('friendly-requests/<int:pk>/<str:action>/', views.handle_friendly_request, name='handle_friendly_request'),
 
     path('feed/', views.news_feed, name='news_feed'),
+    path('live/start/', views.stream_start, name='stream_start'),
+    path('live/<int:pk>/', views.stream_watch, name='stream_watch'),
+    path('live/<int:pk>/broadcast/', views.stream_broadcast, name='stream_broadcast'),
+    path('live/<int:pk>/stop/', views.stream_stop, name='stream_stop'),
+    path('live/<int:pk>/signal/', views.stream_signal, name='stream_signal'),
+    path('live/<int:pk>/poll/', views.stream_poll, name='stream_poll'),
     path('feed/posts/<int:pk>/edit/', views.edit_post, name='edit_post'),
     path('feed/posts/<int:pk>/delete/', views.delete_post, name='delete_post'),
     path('feed/comments/<int:pk>/edit/', views.edit_comment, name='edit_comment'),

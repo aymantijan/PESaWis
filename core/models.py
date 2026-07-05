@@ -400,10 +400,18 @@ class Tournament(TimeStampedModel):
         ('public', 'Public'),
         ('private', 'Private'),
     ]
+    FORMAT_CHOICES = [
+        ('groups_knockout', 'Group stage + knockout'),
+        ('knockout', 'Direct knockout'),
+        ('league', 'Round-robin league'),
+    ]
+    LEG_CHOICES = [(1, 'Single round'), (2, 'Home & away')]
     name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=180, unique=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     visibility = models.CharField(max_length=10, choices=VISIBILITY_CHOICES, default='public')
+    format = models.CharField(max_length=20, choices=FORMAT_CHOICES, default='groups_knockout')
+    group_legs = models.PositiveSmallIntegerField(choices=LEG_CHOICES, default=2)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_tournaments')
     champion = models.ForeignKey(PlayerProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='tournament_wins')
     max_participants = models.PositiveIntegerField(default=32)
@@ -511,6 +519,7 @@ class TournamentMatch(TimeStampedModel):
         ('round_of_16', 'Round of 16'),
         ('quarter_final', 'Quarter-final'),
         ('semi_final', 'Semi-final'),
+        ('third_place', 'Third place'),
         ('final', 'Final'),
     ]
     STATUS_CHOICES = [('scheduled', 'Scheduled'), ('played', 'Played')]
@@ -522,15 +531,60 @@ class TournamentMatch(TimeStampedModel):
     away_player = models.ForeignKey(PlayerProfile, on_delete=models.CASCADE, related_name='tournament_away_matches')
     home_score = models.PositiveIntegerField(null=True, blank=True)
     away_score = models.PositiveIntegerField(null=True, blank=True)
+    home_penalties = models.PositiveIntegerField(null=True, blank=True)
+    away_penalties = models.PositiveIntegerField(null=True, blank=True)
     winner = models.ForeignKey(PlayerProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='tournament_match_wins')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
+    bracket_slot = models.PositiveIntegerField(default=0)
 
     class Meta:
-        ordering = ['round_number', 'stage', 'group__name', 'id']
+        ordering = ['round_number', 'stage', 'group__name', 'bracket_slot', 'id']
 
     @property
     def has_score(self):
         return self.home_score is not None and self.away_score is not None
 
+    @property
+    def went_to_penalties(self):
+        return self.home_penalties is not None and self.away_penalties is not None
+
     def __str__(self):
         return f'{self.tournament}: {self.home_player} vs {self.away_player}'
+
+
+class LiveStream(TimeStampedModel):
+    """A live match stream broadcast from a player's phone via WebRTC.
+
+    Only signaling data transits through the server — the video itself is
+    peer-to-peer and is never stored.
+    """
+    STATUS_CHOICES = [('live', 'Live'), ('ended', 'Ended')]
+    streamer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='live_streams')
+    title = models.CharField(max_length=160)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='live')
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.title} by {self.streamer.username} ({self.status})'
+
+    def get_absolute_url(self):
+        return reverse('stream_watch', kwargs={'pk': self.pk})
+
+
+class StreamSignal(TimeStampedModel):
+    """Ephemeral WebRTC signaling message (offer/answer/ICE candidate)."""
+    TARGET_CHOICES = [('broadcaster', 'Broadcaster'), ('viewer', 'Viewer')]
+    stream = models.ForeignKey(LiveStream, on_delete=models.CASCADE, related_name='signals')
+    peer_id = models.CharField(max_length=64)
+    target = models.CharField(max_length=20, choices=TARGET_CHOICES)
+    kind = models.CharField(max_length=20)
+    payload = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return f'{self.kind} -> {self.target} ({self.stream_id})'

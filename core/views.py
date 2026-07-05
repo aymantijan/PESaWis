@@ -1,5 +1,5 @@
 import json
-from itertools import combinations
+from datetime import timedelta
 from functools import wraps
 
 from django.contrib import messages
@@ -41,6 +41,7 @@ from .models import (
     League,
     LeagueJoinRequest,
     LeagueMembership,
+    LiveStream,
     Match,
     NewsComment,
     NewsPost,
@@ -50,15 +51,16 @@ from .models import (
     PlayerProfile,
     PushSubscription,
     Season,
+    StreamSignal,
     Tournament,
-    TournamentGroup,
-    TournamentGroupMembership,
     TournamentInvite,
     TournamentMatch,
     TournamentParticipant,
 )
 from .push import send_web_push
-from .utils import best_defenders, compute_player_stats, division_standings, season_outcomes, top_scorers, tournament_group_stats
+from .scheduling import round_robin_rounds
+from . import tournaments as tournament_logic
+from .utils import best_defenders, compute_player_stats, division_standings, season_outcomes, top_scorers
 
 
 def staff_required(view_func):
@@ -437,6 +439,96 @@ def handle_friendly_request(request, pk, action):
     return redirect('dashboard')
 
 
+def active_streams():
+    """Streams currently live with a recent broadcaster heartbeat."""
+    cutoff = timezone.now() - timedelta(seconds=90)
+    return LiveStream.objects.select_related('streamer').filter(status='live', updated_at__gte=cutoff)
+
+
+@login_required
+@require_POST
+def stream_start(request):
+    title = request.POST.get('title', '').strip() or f"Live match — {request.user.username}"
+    now = timezone.now()
+    LiveStream.objects.filter(streamer=request.user, status='live').update(status='ended', ended_at=now)
+    stream = LiveStream.objects.create(streamer=request.user, title=title[:160])
+    return redirect('stream_broadcast', pk=stream.pk)
+
+
+@login_required
+def stream_broadcast(request, pk):
+    stream = get_object_or_404(LiveStream, pk=pk, streamer=request.user)
+    return render(request, 'core/stream_broadcast.html', {'stream': stream})
+
+
+@login_required
+def stream_watch(request, pk):
+    stream = get_object_or_404(LiveStream.objects.select_related('streamer'), pk=pk)
+    return render(request, 'core/stream_watch.html', {'stream': stream})
+
+
+@login_required
+@require_POST
+def stream_stop(request, pk):
+    stream = get_object_or_404(LiveStream, pk=pk, streamer=request.user)
+    stream.status = 'ended'
+    stream.ended_at = timezone.now()
+    stream.save(update_fields=['status', 'ended_at', 'updated_at'])
+    stream.signals.all().delete()
+    messages.success(request, 'Stream ended. Nothing was recorded or stored.')
+    return redirect('news_feed')
+
+
+@login_required
+@require_POST
+def stream_signal(request, pk):
+    stream = get_object_or_404(LiveStream, pk=pk, status='live')
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        kind = payload['kind']
+        target = payload['target']
+        peer_id = payload.get('peer_id', '')[:64]
+        data = payload.get('payload', '')
+    except (KeyError, ValueError, TypeError):
+        return HttpResponseBadRequest('Invalid signal payload.')
+    if kind not in {'join', 'offer', 'answer', 'ice', 'leave'} or target not in {'broadcaster', 'viewer'}:
+        return HttpResponseBadRequest('Invalid signal.')
+    if target == 'viewer' and request.user != stream.streamer:
+        return HttpResponseBadRequest('Only the broadcaster signals viewers.')
+    signal = StreamSignal.objects.create(
+        stream=stream, peer_id=peer_id, target=target, kind=kind,
+        payload=data if isinstance(data, str) else json.dumps(data),
+    )
+    return JsonResponse({'id': signal.id})
+
+
+@login_required
+def stream_poll(request, pk):
+    stream = get_object_or_404(LiveStream, pk=pk)
+    role = request.GET.get('role', 'viewer')
+    peer_id = request.GET.get('peer_id', '')[:64]
+    try:
+        after = int(request.GET.get('after', 0))
+    except ValueError:
+        after = 0
+    signals = stream.signals.filter(id__gt=after)
+    if role == 'broadcaster':
+        if request.user != stream.streamer:
+            return HttpResponseBadRequest('Not your stream.')
+        signals = signals.filter(target='broadcaster')
+        # heartbeat keeps the stream listed as live
+        stream.save(update_fields=['updated_at'])
+    else:
+        signals = signals.filter(target='viewer', peer_id=peer_id)
+    return JsonResponse({
+        'status': stream.status,
+        'signals': [
+            {'id': s.id, 'kind': s.kind, 'peer_id': s.peer_id, 'payload': s.payload}
+            for s in signals[:100]
+        ],
+    })
+
+
 def news_feed(request):
     form = NewsPostForm()
     if request.method == 'POST':
@@ -454,7 +546,12 @@ def news_feed(request):
             return redirect('news_feed')
         add_form_error_messages(request, form)
     posts = NewsPost.objects.select_related('author').prefetch_related('comments__author', 'comments__tagged_users', 'reactions', 'tagged_users')
-    return render(request, 'core/news_feed.html', {'posts': posts, 'form': form, 'comment_form': NewsCommentForm()})
+    return render(request, 'core/news_feed.html', {
+        'posts': posts,
+        'form': form,
+        'comment_form': NewsCommentForm(),
+        'live_streams': active_streams(),
+    })
 
 
 @login_required
@@ -622,15 +719,6 @@ def create_division_membership(request):
     return render(request, 'core/form_page.html', {'title': 'Assign player to division', 'form': form})
 
 
-def generate_round_robin(players, double_round=False):
-    rounds = []
-    for round_number, (home, away) in enumerate(combinations(players, 2), start=1):
-        rounds.append((round_number, home, away))
-        if double_round:
-            rounds.append((round_number + len(players) * len(players), away, home))
-    return rounds
-
-
 @staff_required
 def create_calendar(request):
     form = CalendarGenerationForm(request.POST or None)
@@ -643,10 +731,24 @@ def create_calendar(request):
         if Match.objects.filter(division=division, match_type='official').exists():
             messages.error(request, 'Calendar already exists for this division.')
             return redirect('calendar')
+        start_date = form.cleaned_data.get('start_date')
+        days_between = form.cleaned_data.get('days_between_rounds') or 7
+        schedule = round_robin_rounds(players, form.cleaned_data['double_round_robin'])
         with transaction.atomic():
-            for round_number, home, away in generate_round_robin(players, form.cleaned_data['double_round_robin']):
-                Match.objects.create(match_type='official', league=division.season.league, season=division.season, division=division, home_player=home, away_player=away, round_number=round_number, status='scheduled', created_by=request.user)
-        messages.success(request, 'Calendar created successfully.')
+            for round_number, home, away in schedule:
+                scheduled_at = None
+                if start_date:
+                    scheduled_at = timezone.make_aware(
+                        timezone.datetime.combine(start_date, timezone.datetime.min.time()).replace(hour=20)
+                    ) + timedelta(days=(round_number - 1) * days_between)
+                Match.objects.create(
+                    match_type='official', league=division.season.league, season=division.season,
+                    division=division, home_player=home, away_player=away,
+                    round_number=round_number, scheduled_at=scheduled_at,
+                    status='scheduled', created_by=request.user,
+                )
+        round_total = max((r for r, _, _ in schedule), default=0)
+        messages.success(request, f'Calendar created: {len(schedule)} matches over {round_total} rounds — every player plays once per round.')
         return redirect('calendar')
     if request.method == 'POST':
         add_form_error_messages(request, form)
@@ -717,13 +819,25 @@ def apply_promotion_relegation(request, season_id):
         messages.error(request, 'Promotion/relegation has already been applied.')
         return redirect('season_outcome', season_id=season.pk)
     rows = season_outcomes(season)
+    moved = 0
     with transaction.atomic():
         for row in rows:
             if row['outcome'] in {'Promoted', 'Relegated'} and row['target']:
+                DivisionMembership.objects.filter(division=row['division'], player=row['player']).update(is_active=False)
                 DivisionMembership.objects.update_or_create(division=row['target'], player=row['player'], defaults={'is_active': True})
+                moved += 1
+                create_notification(
+                    row['player'].user,
+                    'Promotion' if row['outcome'] == 'Promoted' else 'Relegation',
+                    f'You are {"promoted to" if row["outcome"] == "Promoted" else "relegated to"} {row["target"].name} for the next stage.',
+                    'system',
+                    '/standings/',
+                )
+            elif row['outcome'] == 'Champion':
+                create_notification(row['player'].user, 'Champion!', f'You won {row["division"].name} — league champion of {season.name}!', 'system', '/standings/')
         season.promotions_applied = True
         season.save(update_fields=['promotions_applied', 'updated_at'])
-    messages.success(request, 'Promotion/relegation applied.')
+    messages.success(request, f'Promotion/relegation applied ({moved} players moved).')
     return redirect('season_outcome', season_id=season.pk)
 
 
@@ -744,10 +858,7 @@ def tournament_detail(request, slug):
         messages.error(request, 'This tournament is private.')
         return redirect('tournament_list')
     groups = tournament.groups.prefetch_related('memberships__participant__player__user', 'matches__home_player__user', 'matches__away_player__user')
-    group_tables = []
-    for group in groups:
-        players = [m.participant.player for m in group.memberships.all()]
-        group_tables.append((group, tournament_group_stats(group.matches.filter(status='played'), players)))
+    group_tables = tournament_logic.group_tables(tournament)
     knockout = tournament.matches.select_related('home_player__user', 'away_player__user', 'winner__user').exclude(stage='group')
     selected_participants = tournament.participants.select_related('player__user').filter(status='selected')
     reserve_participants = tournament.participants.select_related('player__user').filter(status='reserve')
@@ -837,6 +948,11 @@ def respond_tournament_invite(request, pk, action):
         if invite.invited_by:
             create_notification(invite.invited_by, 'Invite accepted', f'{request.user.username} joined "{invite.tournament.name}".', 'tournament_invite', invite.tournament.get_absolute_url())
         messages.success(request, f'You joined {invite.tournament.name}.')
+        tournament = invite.tournament
+        if (not tournament.groups_generated
+                and tournament.participants.filter(status='selected').count() >= tournament.max_participants):
+            if run_structure_generation(request, tournament):
+                messages.info(request, f'"{tournament.name}" is full — the draw and fixtures were generated automatically.')
     elif action == 'decline':
         invite.status = 'declined'
         invite.save(update_fields=['status', 'updated_at'])
@@ -857,26 +973,14 @@ def add_tournament_participant(request, slug):
         participant.seed = tournament.participants.count() + 1
         participant.save()
         messages.success(request, 'Created successfully.')
+        if (not tournament.groups_generated
+                and tournament.participants.filter(status='selected').count() >= tournament.max_participants):
+            if run_structure_generation(request, tournament):
+                messages.info(request, f'"{tournament.name}" is full — the draw and fixtures were generated automatically.')
         return redirect('tournament_detail', slug=slug)
     if request.method == 'POST':
         add_form_error_messages(request, form)
     return render(request, 'core/form_page.html', {'title': f'Add participant to {tournament.name}', 'form': form})
-
-
-def ranked_eligible_players():
-    players = list(PlayerProfile.objects.select_related('user').filter(user__is_active=True, is_public=True))
-    matches = Match.objects.select_related('home_player__user', 'away_player__user').filter(status='played')
-    stats_by_player = {row['player'].id: row for row in compute_player_stats(matches, players=players)}
-    return sorted(
-        players,
-        key=lambda player: (
-            -stats_by_player[player.id]['points'],
-            -stats_by_player[player.id]['goal_diff'],
-            -stats_by_player[player.id]['wins'],
-            -stats_by_player[player.id]['played'],
-            player.user.username.lower(),
-        ),
-    )
 
 
 def next_stage_format(group_count):
@@ -887,24 +991,33 @@ def next_stage_format(group_count):
     if group_count == 2:
         return 'Semi-finals'
     if group_count == 1:
-        return 'Final ranking or final between top 2'
+        return 'League table decides the champion'
     if group_count:
-        return 'Manual/adapted knockout required'
+        return 'Knockout completed with best third-placed players'
     return 'Groups not generated yet'
 
 
-def create_group_fixtures(tournament):
-    for group in tournament.groups.all():
-        players = [m.participant.player for m in group.memberships.select_related('participant__player')]
-        for round_number, (home, away) in enumerate(combinations(players, 2), start=1):
-            TournamentMatch.objects.get_or_create(
-                tournament=tournament,
-                group=group,
-                stage='group',
-                home_player=home,
-                away_player=away,
-                defaults={'round_number': round_number},
-            )
+def run_structure_generation(request, tournament):
+    try:
+        selected_count, reserve_count, group_count = tournament_logic.generate_structure(tournament)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return False
+    if reserve_count:
+        messages.info(request, f'{selected_count} players selected, {reserve_count} added to reserves.')
+    if group_count:
+        messages.success(request, f'{selected_count} players drawn into {group_count} group(s); fixtures generated ({"home & away" if tournament.group_legs == 2 else "single round"}).')
+    else:
+        messages.success(request, f'Knockout bracket generated for {selected_count} players.')
+    for participant in tournament.participants.select_related('player__user').filter(status='selected'):
+        create_notification(
+            participant.player.user,
+            'Tournament draw completed',
+            f'The draw for "{tournament.name}" is done. Check your group and fixtures.',
+            'tournament_invite',
+            tournament.get_absolute_url(),
+        )
+    return True
 
 
 @tournament_manager_required
@@ -914,48 +1027,7 @@ def generate_tournament_groups(request, slug):
     if tournament.groups_generated:
         messages.error(request, 'Groups already generated for this tournament.')
         return redirect('tournament_detail', slug=slug)
-
-    eligible_players = ranked_eligible_players()
-    eligible_count = len(eligible_players)
-    if eligible_count < 4:
-        messages.error(request, 'At least 4 eligible players are required.')
-        return redirect('tournament_detail', slug=slug)
-
-    max_players = min(32, tournament.max_participants or 32)
-    capped_players = eligible_players[:max_players]
-    selected_count = (len(capped_players) // 4) * 4
-    selected_players = capped_players[:selected_count]
-    reserve_players = capped_players[selected_count:] + eligible_players[max_players:]
-    group_count = selected_count // 4
-
-    with transaction.atomic():
-        tournament.participants.all().delete()
-        tournament.groups.all().delete()
-        tournament.matches.all().delete()
-
-        selected_participants = []
-        for seed, player in enumerate(selected_players, start=1):
-            selected_participants.append(TournamentParticipant.objects.create(tournament=tournament, player=player, seed=seed, status='selected'))
-        for seed, player in enumerate(reserve_players, start=selected_count + 1):
-            TournamentParticipant.objects.create(tournament=tournament, player=player, seed=seed, status='reserve')
-
-        groups = [TournamentGroup.objects.create(tournament=tournament, name=chr(65 + i)) for i in range(group_count)]
-        pots = [selected_participants[index:index + group_count] for index in range(0, selected_count, group_count)]
-        for pot_index, pot in enumerate(pots):
-            ordered_groups = groups if pot_index % 2 == 0 else list(reversed(groups))
-            for group, participant in zip(ordered_groups, pot):
-                TournamentGroupMembership.objects.create(group=group, participant=participant)
-
-        create_group_fixtures(tournament)
-        tournament.groups_generated = True
-        tournament.group_fixtures_generated = True
-        tournament.status = 'group_stage'
-        tournament.save(update_fields=['groups_generated', 'group_fixtures_generated', 'status', 'updated_at'])
-
-    if reserve_players:
-        messages.info(request, f'{eligible_count} eligible players found. {selected_count} selected and {len(reserve_players)} added to reserves.')
-    messages.success(request, f'{selected_count} players selected. {group_count} groups generated.')
-    messages.success(request, 'Tournament groups generated successfully.')
+    run_structure_generation(request, tournament)
     return redirect('tournament_detail', slug=slug)
 
 
@@ -966,21 +1038,12 @@ def generate_group_fixtures(request, slug):
     if tournament.group_fixtures_generated:
         messages.error(request, 'Group fixtures already generated.')
         return redirect('tournament_detail', slug=slug)
-    create_group_fixtures(tournament)
+    tournament_logic.create_group_fixtures(tournament)
     tournament.group_fixtures_generated = True
     tournament.status = 'group_stage'
     tournament.save(update_fields=['group_fixtures_generated', 'status', 'updated_at'])
     messages.success(request, 'Group fixtures generated.')
     return redirect('tournament_detail', slug=slug)
-
-
-def qualified_players(tournament):
-    qualified = []
-    for group in tournament.groups.all():
-        players = [m.participant.player for m in group.memberships.select_related('participant__player__user')]
-        table = tournament_group_stats(group.matches.filter(status='played'), players)
-        qualified.extend(table[:2])
-    return [row['player'] for row in qualified]
 
 
 @tournament_manager_required
@@ -993,20 +1056,12 @@ def generate_knockout(request, slug):
     if tournament.matches.filter(stage='group').exclude(status='played').exists():
         messages.error(request, 'All group matches must be played before knockout generation.')
         return redirect('tournament_detail', slug=slug)
-    players = qualified_players(tournament)
-    if len(players) < 4:
-        messages.error(request, 'Not enough qualified players.')
+    try:
+        stage, pair_count = tournament_logic.generate_knockout_bracket(tournament)
+    except ValueError as exc:
+        messages.error(request, str(exc))
         return redirect('tournament_detail', slug=slug)
-    if len(players) not in {4, 8, 16}:
-        messages.error(request, f'{len(players)} qualified players require a manual/adapted knockout format.')
-        return redirect('tournament_detail', slug=slug)
-    stage = 'round_of_16' if len(players) == 16 else 'quarter_final' if len(players) == 8 else 'semi_final'
-    for idx in range(0, len(players), 2):
-        TournamentMatch.objects.create(tournament=tournament, stage=stage, round_number=1, home_player=players[idx], away_player=players[idx + 1])
-    tournament.knockout_generated = True
-    tournament.status = 'knockout'
-    tournament.save(update_fields=['knockout_generated', 'status', 'updated_at'])
-    messages.success(request, 'Knockout stage generated.')
+    messages.success(request, f'Knockout stage generated: {pair_count} {stage.replace("_", " ")} matches. Group rivals can only meet again in the final.')
     return redirect('tournament_detail', slug=slug)
 
 
@@ -1018,42 +1073,22 @@ def update_tournament_match(request, pk):
         return redirect('tournament_detail', slug=match.tournament.slug)
     form = TournamentMatchScoreForm(request.POST or None, instance=match)
     if request.method == 'POST' and form.is_valid():
-        match = form.save()
-        if match.stage == 'group' and match.status == 'played':
-            if match.home_score > match.away_score:
-                match.winner = match.home_player
-            elif match.away_score > match.home_score:
-                match.winner = match.away_player
+        match = form.save(commit=False)
+        if match.status == 'played':
+            if match.stage == 'group':
+                if match.home_score > match.away_score:
+                    match.winner = match.home_player
+                elif match.away_score > match.home_score:
+                    match.winner = match.away_player
+                else:
+                    match.winner = None
             else:
-                match.winner = None
-            match.save(update_fields=['winner', 'updated_at'])
-        maybe_advance_knockout(match.tournament)
+                match.winner = tournament_logic.resolve_winner(match)
+        match.save()
+        tournament_logic.advance_knockout(match.tournament)
+        tournament_logic.maybe_complete_league(match.tournament)
         messages.success(request, 'Score saved successfully.')
         return redirect('tournament_detail', slug=match.tournament.slug)
     if request.method == 'POST':
         add_form_error_messages(request, form)
     return render(request, 'core/form_page.html', {'title': 'Update tournament match', 'form': form})
-
-
-def next_stage(stage):
-    return {'round_of_16': 'quarter_final', 'quarter_final': 'semi_final', 'semi_final': 'final'}.get(stage)
-
-
-def maybe_advance_knockout(tournament):
-    stages = ['round_of_16', 'quarter_final', 'semi_final', 'final']
-    for stage in stages:
-        matches = list(tournament.matches.filter(stage=stage))
-        if not matches or any(m.status != 'played' or not m.winner for m in matches):
-            continue
-        if stage == 'final':
-            tournament.champion = matches[0].winner
-            tournament.status = 'completed'
-            tournament.save(update_fields=['champion', 'status', 'updated_at'])
-            return
-        target = next_stage(stage)
-        if tournament.matches.filter(stage=target).exists():
-            return
-        winners = [m.winner for m in matches]
-        for idx in range(0, len(winners), 2):
-            TournamentMatch.objects.create(tournament=tournament, stage=target, round_number=matches[0].round_number + 1, home_player=winners[idx], away_player=winners[idx + 1])
-        return

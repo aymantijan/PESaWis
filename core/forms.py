@@ -138,6 +138,16 @@ class DivisionMembershipForm(forms.ModelForm):
             'player': REQUIRED_ERROR,
         }
 
+    def clean(self):
+        cleaned = super().clean()
+        division = cleaned.get('division')
+        is_active = cleaned.get('is_active')
+        if division and is_active:
+            active_count = division.memberships.filter(is_active=True).exclude(pk=self.instance.pk or 0).count()
+            if active_count >= 12:
+                raise forms.ValidationError('A division holds a maximum of 12 players (like a real league division).')
+        return cleaned
+
 
 class MatchForm(forms.ModelForm):
     class Meta:
@@ -237,13 +247,19 @@ class NotificationPreferenceForm(forms.ModelForm):
 
 class CalendarGenerationForm(forms.Form):
     division = forms.ModelChoiceField(queryset=Division.objects.select_related('season__league').all())
-    double_round_robin = forms.BooleanField(required=False, initial=False, label='Double round-robin')
+    double_round_robin = forms.BooleanField(required=False, initial=True, label='Double round-robin (home & away)')
+    start_date = forms.DateField(required=False, label='First round date', widget=forms.DateInput(attrs={'type': 'date'}))
+    days_between_rounds = forms.IntegerField(required=False, initial=7, min_value=1, max_value=30, label='Days between rounds')
 
 
 class TournamentForm(forms.ModelForm):
     class Meta:
         model = Tournament
-        fields = ('name', 'status', 'max_participants')
+        fields = ('name', 'status', 'max_participants', 'format', 'group_legs')
+        labels = {
+            'format': 'Competition format',
+            'group_legs': 'Group matches',
+        }
         error_messages = {
             'name': REQUIRED_ERROR,
             'status': REQUIRED_ERROR,
@@ -260,7 +276,11 @@ class TournamentParticipantForm(forms.ModelForm):
 class PrivateTournamentForm(forms.ModelForm):
     class Meta:
         model = Tournament
-        fields = ('name', 'max_participants')
+        fields = ('name', 'max_participants', 'format', 'group_legs')
+        labels = {
+            'format': 'Competition format (your choice as organizer)',
+            'group_legs': 'Group matches',
+        }
         error_messages = {
             'name': REQUIRED_ERROR,
             'max_participants': REQUIRED_ERROR,
@@ -291,22 +311,26 @@ class TournamentInviteForm(forms.Form):
 class TournamentMatchScoreForm(forms.ModelForm):
     class Meta:
         model = TournamentMatch
-        fields = ('home_score', 'away_score', 'winner', 'status')
+        fields = ('home_score', 'away_score', 'home_penalties', 'away_penalties', 'winner', 'status')
+        labels = {
+            'home_penalties': 'Home penalties (shoot-out, knockout ties only)',
+            'away_penalties': 'Away penalties (shoot-out, knockout ties only)',
+        }
 
     def clean(self):
         cleaned = super().clean()
         status = cleaned.get('status')
         home_score = cleaned.get('home_score')
         away_score = cleaned.get('away_score')
+        home_pens = cleaned.get('home_penalties')
+        away_pens = cleaned.get('away_penalties')
         winner = cleaned.get('winner')
         if status == 'played' and (home_score is None or away_score is None):
             raise forms.ValidationError('Invalid score.')
-        if self.instance.stage != 'group' and status == 'played':
-            valid_winners = {self.instance.home_player_id, self.instance.away_player_id}
-            if winner is None:
-                raise forms.ValidationError('Choose a winner for knockout matches.')
-            if winner.id not in valid_winners:
+        if self.instance.stage != 'group' and status == 'played' and home_score == away_score:
+            has_penalty_winner = home_pens is not None and away_pens is not None and home_pens != away_pens
+            if not has_penalty_winner and winner is None:
+                raise forms.ValidationError('A tied knockout match must be decided: enter a penalty shoot-out score or pick the winner.')
+            if winner is not None and winner.id not in {self.instance.home_player_id, self.instance.away_player_id}:
                 raise forms.ValidationError('Winner must be one of the match players.')
-            if home_score == away_score and winner is None:
-                raise forms.ValidationError('Choose a penalty/manual winner for a tied knockout match.')
         return cleaned

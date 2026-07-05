@@ -90,6 +90,13 @@ def division_standings(division):
 
 
 def season_outcomes(season):
+    """Season verdict following league football rules.
+
+    - The winner of the first division is the league champion.
+    - The top 2 of every lower division are promoted to the division above.
+    - The bottom 2 of every division are relegated to the division below
+      (when one exists).
+    """
     divisions = list(season.divisions.order_by('order', 'name'))
     rows = []
     for index, division in enumerate(divisions):
@@ -98,16 +105,18 @@ def season_outcomes(season):
         for rank, row in enumerate(standings, start=1):
             outcome = 'Safe'
             target = None
-            if index == 0 and rank <= 2:
+            if index == 0 and rank == 1:
                 outcome = 'Champion'
+            elif index == 0 and rank == 2:
+                outcome = 'Runner-up'
             elif index > 0 and rank <= 2:
                 outcome = 'Promoted'
                 target = divisions[index - 1]
-            if count >= 3 and rank > max(count - 2, 0):
+            if count >= 4 and rank > count - 2:
                 if index < len(divisions) - 1:
                     outcome = 'Relegated'
                     target = divisions[index + 1]
-                elif outcome == 'Safe':
+                else:
                     outcome = 'Relegation zone'
             rows.append({
                 'division': division,

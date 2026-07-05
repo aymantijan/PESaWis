@@ -7,6 +7,7 @@ from .models import (
     League,
     LeagueJoinRequest,
     LeagueMembership,
+    LiveStream,
     Match,
     NewsComment,
     NewsLike,
@@ -132,9 +133,17 @@ class TournamentGroupInline(admin.TabularInline):
 
 @admin.register(Tournament)
 class TournamentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'status', 'champion', 'groups_generated', 'knockout_generated')
+    list_display = ('name', 'status', 'format', 'group_legs', 'visibility', 'champion', 'groups_generated', 'knockout_generated')
+    list_filter = ('status', 'format', 'visibility')
     search_fields = ('name', 'slug')
     inlines = [TournamentParticipantInline, TournamentGroupInline]
+
+
+@admin.register(LiveStream)
+class LiveStreamAdmin(admin.ModelAdmin):
+    list_display = ('title', 'streamer', 'status', 'created_at', 'ended_at')
+    list_filter = ('status',)
+    search_fields = ('title', 'streamer__username')
 
 
 @admin.register(TournamentGroup)

@@ -4,15 +4,14 @@
 <section class="page-head">
   <div>
     <h1>{{ tournament.name }} <span class="badge {% if tournament.visibility == 'private' %}badge-private{% else %}badge-public{% endif %}">{{ tournament.get_visibility_display }}</span></h1>
-    <p>{{ tournament.get_status_display }}{% if tournament.champion %} - Champion: {{ tournament.champion.user.username }}{% endif %}{% if tournament.created_by %} · Created by {{ tournament.created_by.username }}{% endif %}</p>
+    <p>{{ tournament.get_status_display }} · {{ tournament.get_format_display }}{% if tournament.format != 'knockout' %} · Groups: {{ tournament.get_group_legs_display }}{% endif %}{% if tournament.champion %} - 🏆 Champion: {{ tournament.champion.user.username }}{% endif %}{% if tournament.created_by %} · Created by {{ tournament.created_by.username }}{% endif %}</p>
   </div>
 </section>
 
 {% if can_manage %}
 <section class="toolbar">
   <a class="button small" href="{% url 'add_tournament_participant' tournament.slug %}">Add participant</a>
-  <form method="post" action="{% url 'generate_tournament_groups' tournament.slug %}">{% csrf_token %}<button class="button small">Auto-select Players and Generate Groups</button></form>
-  <form method="post" action="{% url 'generate_group_fixtures' tournament.slug %}">{% csrf_token %}<button class="button small ghost">Generate Group Fixtures</button></form>
+  <form method="post" action="{% url 'generate_tournament_groups' tournament.slug %}">{% csrf_token %}<button class="button small">Run Draw &amp; Generate Fixtures</button></form>
   <form method="post" action="{% url 'generate_knockout' tournament.slug %}">{% csrf_token %}<button class="button small">Generate Knockout Stage</button></form>
 </section>
 {% endif %}
@@ -78,7 +77,7 @@
       <div class="stack">
       {% for match in group.matches.all %}
         <div class="list-card">
-          <span>{{ match.home_player.user.username }} vs {{ match.away_player.user.username }}</span>
+          <span>R{{ match.round_number }}: {{ match.home_player.user.username }} vs {{ match.away_player.user.username }}</span>
           <span>{% if match.has_score %}{{ match.home_score }} - {{ match.away_score }}{% else %}{{ match.get_status_display }}{% endif %}{% if can_manage %} - <a href="{% url 'update_tournament_match' match.pk %}">Edit</a>{% endif %}</span>
         </div>
       {% empty %}<div class="empty">No fixtures yet.</div>{% endfor %}
@@ -101,14 +100,11 @@
 
 <section>
   <h2>Knockout</h2>
-  {% if next_stage_format == 'Manual/adapted knockout required' %}
-    <div class="empty">This participant count requires a manual/adapted knockout format after group qualification.</div>
-  {% endif %}
   <div class="stack">
   {% for match in knockout %}
     <div class="list-card">
       <span>{{ match.get_stage_display }}: {{ match.home_player.user.username }} vs {{ match.away_player.user.username }}</span>
-      <span>{% if match.has_score %}{{ match.home_score }} - {{ match.away_score }}{% if match.winner %} - Winner: {{ match.winner.user.username }}{% endif %}{% else %}{{ match.get_status_display }}{% endif %}{% if can_manage %} - <a href="{% url 'update_tournament_match' match.pk %}">Edit</a>{% endif %}</span>
+      <span>{% if match.has_score %}{{ match.home_score }} - {{ match.away_score }}{% if match.went_to_penalties %} ({{ match.home_penalties }}-{{ match.away_penalties }} pens){% endif %}{% if match.winner %} - Winner: {{ match.winner.user.username }}{% endif %}{% else %}{{ match.get_status_display }}{% endif %}{% if can_manage %} - <a href="{% url 'update_tournament_match' match.pk %}">Edit</a>{% endif %}</span>
     </div>
   {% empty %}<div class="empty">Knockout bracket not generated yet.</div>{% endfor %}
   </div>

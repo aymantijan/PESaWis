@@ -1,0 +1,96 @@
+{% extends 'core/base.html' %}
+{% block title %}{{ stream.title }} — Live{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>{% if stream.status == 'live' %}🔴{% else %}⏹{% endif %} {{ stream.title }}</h1>
+  <p>Streamed live by <a href="{% url 'player_detail' stream.streamer.username %}">{{ stream.streamer.username }}</a> — peer-to-peer, nothing is recorded.</p>
+</section>
+
+<section class="card">
+  <video id="remote-video" autoplay playsinline controls style="width:100%; max-height:70vh; background:#000; border-radius:8px;"></video>
+  <p id="watch-status" class="muted" style="margin:.6rem 0;">
+    {% if stream.status == 'live' %}Connecting to the stream…{% else %}This stream has ended.{% endif %}
+  </p>
+  <a class="btn" href="{% url 'news_feed' %}">← Back to feed</a>
+</section>
+
+{% if stream.status == 'live' %}
+<script>
+(function () {
+  const streamId = {{ stream.pk }};
+  const statusEl = document.getElementById('watch-status');
+  const videoEl = document.getElementById('remote-video');
+  const peerId = 'v-' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+  let pc = null;
+  let lastSignal = 0;
+  const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+  function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? m.pop() : '';
+  }
+  const csrf = getCookie('csrftoken');
+
+  function sendSignal(kind, payload) {
+    return fetch(`/live/${streamId}/signal/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({ kind: kind, target: 'broadcaster', peer_id: peerId, payload: JSON.stringify(payload || {}) }),
+    });
+  }
+
+  function createPeer() {
+    pc = new RTCPeerConnection(rtcConfig);
+    pc.ontrack = e => {
+      if (videoEl.srcObject !== e.streams[0]) {
+        videoEl.srcObject = e.streams[0];
+        statusEl.textContent = 'Watching live.';
+      }
+    };
+    pc.onicecandidate = e => { if (e.candidate) sendSignal('ice', e.candidate); };
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'disconnected'].includes(pc.connectionState)) {
+        statusEl.textContent = 'Connection lost — retrying…';
+        pc.close(); pc = null;
+        setTimeout(() => sendSignal('join'), 1500);
+      }
+    };
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch(`/live/${streamId}/poll/?role=viewer&peer_id=${peerId}&after=${lastSignal}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.status === 'ended') {
+        statusEl.textContent = 'This stream has ended.';
+        if (pc) pc.close();
+        return;
+      }
+      for (const sig of data.signals) {
+        lastSignal = Math.max(lastSignal, sig.id);
+        if (sig.kind === 'offer') {
+          if (!pc) createPeer();
+          await pc.setRemoteDescription(JSON.parse(sig.payload));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await sendSignal('answer', answer);
+        } else if (sig.kind === 'ice' && pc) {
+          try { await pc.addIceCandidate(JSON.parse(sig.payload)); } catch (e) {}
+        }
+      }
+      setTimeout(poll, 1500);
+    } catch (e) {
+      setTimeout(poll, 3000);
+    }
+  }
+
+  sendSignal('join').then(() => poll());
+  window.addEventListener('beforeunload', () => {
+    sendSignal('leave');
+    if (pc) pc.close();
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -3,6 +3,32 @@
 {% block content %}
 <section class="page-head"><h1>Feed</h1><p>What's happening across the league right now.</p></section>
 
+{% if live_streams %}
+<section class="card" style="border-left:4px solid #e11d48;">
+  <h2 style="margin-top:0;">🔴 Live now</h2>
+  <ul class="list-unstyled" style="margin:0; padding:0; list-style:none;">
+    {% for stream in live_streams %}
+    <li style="display:flex; align-items:center; gap:.6rem; padding:.35rem 0;">
+      <span style="color:#e11d48; font-weight:700;">● LIVE</span>
+      <strong>{{ stream.title }}</strong>
+      <span class="muted">by {{ stream.streamer.username }}</span>
+      <a class="btn btn-small" href="{% url 'stream_watch' stream.pk %}">Watch</a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if user.is_authenticated %}
+<section class="card">
+  <form method="post" action="{% url 'stream_start' %}" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+    {% csrf_token %}
+    <input type="text" name="title" maxlength="160" placeholder="Stream a match live from your phone (nothing is recorded)" style="flex:1; min-width:220px;">
+    <button class="btn" type="submit">🔴 Go live</button>
+  </form>
+</section>
+{% endif %}
+
 {% if user.is_authenticated %}
 <section class="composer">
   <form method="post" enctype="multipart/form-data" class="form composer-form">
