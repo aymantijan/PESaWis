@@ -8,8 +8,7 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in {'1', 'true', 'yes', '
 ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
-    # Replace YOUR_USERNAME with your PythonAnywhere username before production.
-    'YOUR_USERNAME.pythonanywhere.com',
+    'pesawis.pythonanywhere.com',
 ]
 
 INSTALLED_APPS = [

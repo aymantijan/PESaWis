@@ -1,1 +1,2 @@
 Django>=5.0,<6.0
+pywebpush>=2.0,<3.0
